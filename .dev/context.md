@@ -6,12 +6,12 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 ## 📊 Current High-Level State
 
-*   **Last Updated**: 2026-06-22
-*   **Current Wave**: Wave 1 (Groundwork / Scaffolding)
-*   Current Task: 1.6.1: Define User Pydantic schemas completed.
+*   **Last Updated**: 2026-06-23
+*   **Current Wave**: Wave 2 (Authentication Service)
+*   Current Task: 2.5.2: Apply authorization middleware exclusions completed.
 *   **Active Directory Layout**:
     *   Root contains: `pyproject.toml`, `main.py`, `README.md`
-    *   `backend/` contains: `.python-version`, `pyproject.toml`, `alembic.ini`, `README.md`, `app/`, `migrations/`
+    *   `backend/` contains: `.python-version`, `pyproject.toml`, `alembic.ini`, `README.md`, `app/`, `migrations/`, `tests/`
     *   `frontend/` contains: `package.json`, `package-lock.json`, `vite.config.js`, `index.html`, `.gitignore`, `src/`
     *   `.dev/` contains: `INDEX.md`, `requirements.md`, `tasks.md`, `task_agent_mapping.md`, `context.md`
 
@@ -30,6 +30,23 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 | Task ID | Wave | Description | Completed At | Agent | Key Code Modifications / Outputs |
 |---------|------|-------------|--------------|-------|----------------------------------|
+| **2.5.2** | Wave 2 | Apply authorization middleware exclusions | 2026-06-23 | `security-auditor` | Registered `JWTMiddleware` to FastAPI in `backend/app/main.py`. |
+| **2.5.1** | Wave 2 | Create authorization Bearer parsing middleware | 2026-06-23 | `security-auditor` | Created `backend/app/auth/middleware.py` parsing headers and attaching user identities. |
+| **2.4.2** | Wave 2 | Write property tests for token error scenarios (Property 5) | 2026-06-23 | `test-engineer` | Added Hypothesis test verifying invalid token decodes return None. |
+| **2.4.1** | Wave 2 | Write property tests for token expiration calculations (Property 3) | 2026-06-23 | `test-engineer` | Added Hypothesis tests checking token lifecycle, encoding, and past-expired token checks. |
+| **2.3.2** | Wave 2 | Write token decoding and signature validation | 2026-06-23 | `security-auditor` | Created `decode_token` in `backend/app/auth/jwt.py`. |
+| **2.3.1** | Wave 2 | Write access token generation method | 2026-06-23 | `security-auditor` | Created `create_access_token` with 24 hours default expiry inside `backend/app/auth/jwt.py`. |
+| **2.2.3** | Wave 2 | Write property tests for registration length checks (Property 4) | 2026-06-23 | `test-engineer` | Created `backend/tests/unit/test_auth_service.py` verifying password lower bound. |
+| **2.2.2** | Wave 2 | Write property tests for password hashing cost factors (Property 2) | 2026-06-23 | `test-engineer` | Added Hypothesis tests checking cost factor (rounds >= 10) and mismatch verification. |
+| **2.2.1** | Wave 2 | Write property tests for email formats (Property 1) | 2026-06-23 | `test-engineer` | Added Hypothesis tests checking email pattern limits and oversize inputs. |
+| **2.1.2** | Wave 2 | Implement email format validator | 2026-06-23 | `security-auditor` | Created `validate_email_format` check inside `backend/app/auth/utils.py`. |
+| **2.1.1** | Wave 2 | Implement bcrypt password hashing functions | 2026-06-23 | `security-auditor` | Created `hash_password` and `verify_password` wrappers in `backend/app/auth/utils.py`. |
+| **1.7.2** | Wave 1 | Create FastAPI main entrypoint and CORS configurations | 2026-06-23 | `backend-specialist` | Created `backend/app/main.py` initializing FastAPI and registering CORSMiddleware for frontend endpoints. |
+| **1.6.5** | Wave 1 | Establish standard API error response envelope | 2026-06-23 | `backend-specialist` | Created `backend/app/schemas/error.py` defining standardized error response format. |
+| **1.7.1** | Wave 1 | Write environment configuration management | 2026-06-23 | `security-auditor` | Created `backend/app/core/security.py` using Passlib (Bcrypt) and Python-Jose (HS256) with 30 minutes token expiration defaults. Added ACCESS_TOKEN_EXPIRE_MINUTES configuration to `backend/app/config.py`. |
+| **1.6.4** | Wave 1 | Define Project and Notification Pydantic schemas | 2026-06-23 | `backend-specialist` | Created `backend/app/schemas/project.py` and `backend/app/schemas/notification.py` modeling workspace entries and unread/read alert schemas. |
+| **1.6.3** | Wave 1 | Define Chat, Message, and Citation Pydantic schemas | 2026-06-23 | `backend-specialist` | Created `backend/app/schemas/chat.py` defining chat requests, nested message response timelines, and nested citation snippets. |
+| **1.6.2** | Wave 1 | Define Document Pydantic schemas | 2026-06-23 | `backend-specialist` | Created `backend/app/schemas/document.py` modeling file sizes, statuses, and metadata payloads. |
 | **1.6.1** | Wave 1 | Define User Pydantic schemas | 2026-06-23 | `backend-specialist` | Created `backend/app/schemas/user.py` defining sign-up inputs and JWT token structures. Added `email-validator` dependency. |
 | **1.5.6** | Wave 1 | Implement Notification SQLAlchemy model | 2026-06-23 | `database-architect` | Created `backend/app/models/notification.py` mapping unread/read alerts and foreign key to User. Restructured `backend/app/db/base.py` and `env.py` for metadata imports. |
 | **1.5.5** | Wave 1 | Implement Project and ProjectChat SQLAlchemy models | 2026-06-23 | `database-architect` | Created `backend/app/models/project.py` mapping workspace tables, junction join constraints, and cascading rules. |
@@ -82,12 +99,27 @@ This file serves as a persistent context log for the Lexis RAG system implementa
     "1.5.4",
     "1.5.5",
     "1.5.6",
-    "1.6.1"
-  ],
-  "pending_immediate_tasks": [
+    "1.6.1",
     "1.6.2",
     "1.6.3",
-    "1.6.4"
+    "1.6.4",
+    "1.7.1",
+    "1.6.5",
+    "1.7.2",
+    "2.1.1",
+    "2.1.2",
+    "2.2.1",
+    "2.2.2",
+    "2.2.3",
+    "2.3.1",
+    "2.3.2",
+    "2.4.1",
+    "2.4.2",
+    "2.5.1",
+    "2.5.2"
+  ],
+  "pending_immediate_tasks": [
+    "2.6"
   ]
 }
 ```
