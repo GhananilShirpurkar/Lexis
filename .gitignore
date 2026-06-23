@@ -13,6 +13,7 @@ wheels/
 #Development tools
 .dev/
 .agent/
+.dev/context.md
 
 
 #Sectets

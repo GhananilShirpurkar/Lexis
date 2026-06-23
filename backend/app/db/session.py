@@ -1,4 +1,5 @@
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from typing import AsyncGenerator
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from app.config import settings
 
 # Enforce async driver for SQLAlchemy connection url
@@ -22,3 +23,14 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,
     expire_on_commit=False
 )
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """FastAPI database dependency provider.
+    Yields an active database session, ensuring rollback on exception and auto-close.
+    """
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
