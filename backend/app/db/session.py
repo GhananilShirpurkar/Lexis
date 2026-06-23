@@ -1,4 +1,4 @@
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from app.config import settings
 
 # Enforce async driver for SQLAlchemy connection url
@@ -13,4 +13,12 @@ engine = create_async_engine(
     max_overflow=10,
     pool_pre_ping=True,
     echo=False
+)
+
+# Configure asynchronous session lifecycle factory
+AsyncSessionLocal = async_sessionmaker(
+    bind=engine,
+    autocommit=False,
+    autoflush=False,
+    expire_on_commit=False
 )

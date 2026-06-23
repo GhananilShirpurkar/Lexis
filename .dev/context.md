@@ -8,7 +8,7 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 *   **Last Updated**: 2026-06-22
 *   **Current Wave**: Wave 1 (Groundwork / Scaffolding)
-*   Current Task: 1.4.1: Establish SQLAlchemy database engine connection configurations completed.
+*   Current Task: 1.4.2: Implement SQLAlchemy session lifecycle factory completed.
 *   **Active Directory Layout**:
     *   Root contains: `pyproject.toml`, `main.py`, `README.md`
     *   `backend/` contains: `.python-version`, `pyproject.toml`, `alembic.ini`, `README.md`, `app/`, `migrations/`
@@ -30,6 +30,7 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 | Task ID | Wave | Description | Completed At | Agent | Key Code Modifications / Outputs |
 |---------|------|-------------|--------------|-------|----------------------------------|
+| **1.4.2** | Wave 1 | Implement SQLAlchemy session lifecycle factory | 2026-06-23 | `database-architect` | Added `AsyncSessionLocal` sessionmaker configuration to `backend/app/db/session.py`. |
 | **1.4.1** | Wave 1 | Establish SQLAlchemy database engine connection configurations | 2026-06-23 | `database-architect` | Created config parsing module `backend/app/config.py` and initialized the async database engine with pool sizing in `backend/app/db/session.py`. |
 | **1.3.2** | Wave 1 | Write migration DDL schema definitions | 2026-06-23 | `database-architect` | Created Alembic initial migration version script `backend/migrations/versions/001_initial.py` defining schemas for `users`, `documents`, `chats`, `messages`, `citations`, `projects`, `project_chats`, and `notifications`. |
 | **1.3.1** | Wave 1 | Initialize schema migration directories | 2026-06-23 | `database-architect` | Initialized Alembic setup with `backend/alembic.ini`, `backend/migrations/env.py`, `backend/migrations/script.py.mako`, and `backend/migrations/versions/.gitkeep`. |
@@ -64,10 +65,10 @@ This file serves as a persistent context log for the Lexis RAG system implementa
     "1.2.3",
     "1.3.1",
     "1.3.2",
-    "1.4.1"
+    "1.4.1",
+    "1.4.2"
   ],
   "pending_immediate_tasks": [
-    "1.4.2",
     "1.4.3"
   ]
 }
