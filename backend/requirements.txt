@@ -1,0 +1,18 @@
+# Lexis Backend Requirements
+fastapi
+uvicorn[standard]
+sqlalchemy[asyncio]
+asyncpg
+python-jose[cryptography]
+passlib[bcrypt]
+boto3
+llama-index
+google-generativeai
+groq
+apscheduler
+pydantic
+pydantic-settings
+python-multipart
+alembic
+email-validator
+

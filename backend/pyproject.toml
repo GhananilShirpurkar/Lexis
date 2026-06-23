@@ -22,7 +22,9 @@ dependencies = [
     "apscheduler",
     "pydantic",
     "pydantic-settings",
-    "python-multipart"
+    "python-multipart",
+    "alembic",
+    "email-validator"
 ]
 
 [project.optional-dependencies]

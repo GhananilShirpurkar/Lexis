@@ -8,7 +8,7 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 *   **Last Updated**: 2026-06-22
 *   **Current Wave**: Wave 1 (Groundwork / Scaffolding)
-*   Current Task: 1.5.1: Implement User SQLAlchemy model completed.
+*   Current Task: 1.6.1: Define User Pydantic schemas completed.
 *   **Active Directory Layout**:
     *   Root contains: `pyproject.toml`, `main.py`, `README.md`
     *   `backend/` contains: `.python-version`, `pyproject.toml`, `alembic.ini`, `README.md`, `app/`, `migrations/`
@@ -30,6 +30,12 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 | Task ID | Wave | Description | Completed At | Agent | Key Code Modifications / Outputs |
 |---------|------|-------------|--------------|-------|----------------------------------|
+| **1.6.1** | Wave 1 | Define User Pydantic schemas | 2026-06-23 | `backend-specialist` | Created `backend/app/schemas/user.py` defining sign-up inputs and JWT token structures. Added `email-validator` dependency. |
+| **1.5.6** | Wave 1 | Implement Notification SQLAlchemy model | 2026-06-23 | `database-architect` | Created `backend/app/models/notification.py` mapping unread/read alerts and foreign key to User. Restructured `backend/app/db/base.py` and `env.py` for metadata imports. |
+| **1.5.5** | Wave 1 | Implement Project and ProjectChat SQLAlchemy models | 2026-06-23 | `database-architect` | Created `backend/app/models/project.py` mapping workspace tables, junction join constraints, and cascading rules. |
+| **1.5.4** | Wave 1 | Implement Citation SQLAlchemy model | 2026-06-23 | `database-architect` | Created `backend/app/models/citation.py` with excerpt and page number definitions, and cascade deleted references. |
+| **1.5.3** | Wave 1 | Implement Chat and Message SQLAlchemy models | 2026-06-23 | `database-architect` | Created `backend/app/models/chat.py` and `backend/app/models/message.py` with cross-referenced relationships and foreign keys. |
+| **1.5.2** | Wave 1 | Implement Document SQLAlchemy model | 2026-06-23 | `database-architect` | Created `backend/app/models/document.py` mapping Document fields, foreign keys, and indexes (including compound index on expiry/status). |
 | **1.5.1** | Wave 1 | Implement User SQLAlchemy model | 2026-06-23 | `database-architect` | Created base model class `backend/app/db/base.py` and `backend/app/models/user.py` mapping email, hashed password, and relationships. |
 | **1.4.3** | Wave 1 | Create FastAPI database dependency provider | 2026-06-23 | `database-architect` | Created database dependency `get_db()` inside `backend/app/db/session.py` with automatic exception rollback. |
 | **1.4.2** | Wave 1 | Implement SQLAlchemy session lifecycle factory | 2026-06-23 | `database-architect` | Added `AsyncSessionLocal` sessionmaker configuration to `backend/app/db/session.py`. |
@@ -70,14 +76,18 @@ This file serves as a persistent context log for the Lexis RAG system implementa
     "1.4.1",
     "1.4.2",
     "1.4.3",
-    "1.5.1"
-  ],
-  "pending_immediate_tasks": [
+    "1.5.1",
     "1.5.2",
     "1.5.3",
     "1.5.4",
     "1.5.5",
-    "1.5.6"
+    "1.5.6",
+    "1.6.1"
+  ],
+  "pending_immediate_tasks": [
+    "1.6.2",
+    "1.6.3",
+    "1.6.4"
   ]
 }
 ```
