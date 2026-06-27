@@ -1,5 +1,5 @@
 import os
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, UploadFile
 
 ALLOWED_EXTENSIONS = {
     ".pdf", 
@@ -57,3 +57,63 @@ def validate_file(filename: str, content_type: str) -> None:
                 }
             }
         )
+
+async def validate_file_size(file: UploadFile, content_length: int | None = None) -> None:
+    """Validate that the uploaded file size is between 1 byte and 50 MB.
+    Checks the Content-Length header first (fail-fast), then verifies actual read bytes (failsafe).
+    """
+    MAX_SIZE = 50 * 1024 * 1024  # 50 MB
+    
+    # 1. Fail-fast using Content-Length header if provided
+    if content_length is not None:
+        if content_length <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": {
+                        "code": "EMPTY_FILE",
+                        "message": "File is empty."
+                    }
+                }
+            )
+        if content_length > MAX_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": {
+                        "code": "FILE_TOO_LARGE",
+                        "message": "File size exceeds the 50 MB maximum limit."
+                    }
+                }
+            )
+            
+    # 2. Failsafe: check actual file size on the UploadFile object
+    actual_size = file.size
+    if actual_size is None:
+        # Fallback if size attribute is not populated
+        await file.seek(0, os.SEEK_END)
+        actual_size = await file.tell()
+        await file.seek(0)
+        
+    if actual_size <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": "EMPTY_FILE",
+                    "message": "File is empty."
+                }
+            }
+        )
+        
+    if actual_size > MAX_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": "FILE_TOO_LARGE",
+                    "message": "File size exceeds the 50 MB maximum limit."
+                }
+            }
+        )
+
