@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GROQ_API_KEY: str = ""
 
+    # Rate Limiting configuration options
+    RATE_LIMIT_LOGIN_IP_LIMIT: int = 20
+    RATE_LIMIT_LOGIN_IP_WINDOW: int = 3600
+    RATE_LIMIT_LOGIN_EMAIL_LIMIT: int = 5
+    RATE_LIMIT_LOGIN_EMAIL_WINDOW: int = 900
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

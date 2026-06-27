@@ -8,7 +8,7 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 *   **Last Updated**: 2026-06-27
 *   **Current Wave**: Wave 2 (Authentication Service)
-*   Current Task: 2.6: Implement registration and login endpoints completed.
+*   Current Task: 2.7.1: Write dynamic sliding-window rate limit service completed.
 *   **Active Directory Layout**:
     *   Root contains: `pyproject.toml`, `main.py`, `README.md`
     *   `backend/` contains: `.python-version`, `pyproject.toml`, `alembic.ini`, `README.md`, `app/`, `migrations/`, `tests/`
@@ -30,6 +30,7 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 | Task ID | Wave | Description | Completed At | Agent | Key Code Modifications / Outputs |
 |---------|------|-------------|--------------|-------|----------------------------------|
+| **2.7.1** | Wave 2 | Write dynamic sliding-window rate limit service | 2026-06-27 | `security-auditor` | Implemented abstract rate limiter class and in-memory cache storage tracking independent IP and email attempt thresholds. |
 | **2.6.2** | Wave 2 | Create User Login API endpoint | 2026-06-27 | `backend-specialist` | Created POST /auth/login with credentials validation and JWT token issuance. |
 | **2.6.1** | Wave 2 | Create User Registration API endpoint | 2026-06-27 | `backend-specialist` | Created POST /auth/register validating email, duplicate checks, password hashing, and JWT token issuance. Enforced 72-char password max. |
 | **2.5.2** | Wave 2 | Apply authorization middleware exclusions | 2026-06-23 | `security-auditor` | Registered `JWTMiddleware` to FastAPI in `backend/app/main.py`. |
@@ -120,10 +121,11 @@ This file serves as a persistent context log for the Lexis RAG system implementa
     "2.5.1",
     "2.5.2",
     "2.6.1",
-    "2.6.2"
+    "2.6.2",
+    "2.7.1"
   ],
   "pending_immediate_tasks": [
-    "2.7"
+    "2.7.2"
   ]
 }
 ```
