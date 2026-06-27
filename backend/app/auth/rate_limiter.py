@@ -1,7 +1,9 @@
 import time
 from abc import ABC, abstractmethod
 from collections import deque
-from fastapi import Request
+from fastapi import Request, HTTPException, status
+from app.config import settings
+from app.schemas.user import UserCreate
 
 class RateLimitStorage(ABC):
     @abstractmethod
@@ -11,6 +13,11 @@ class RateLimitStorage(ABC):
         Returns:
             (allowed: bool, retry_after_seconds: int)
         """
+        pass
+
+    @abstractmethod
+    def clear(self, key: str) -> None:
+        """Clear attempt history for the given key."""
         pass
 
 class InMemoryRateLimitStorage(RateLimitStorage):
@@ -40,6 +47,11 @@ class InMemoryRateLimitStorage(RateLimitStorage):
         history.append(now)
         return True, 0
 
+    def clear(self, key: str) -> None:
+        """Clear attempt history for the given key."""
+        if key in self._storage:
+            del self._storage[key]
+
     def reset(self):
         """Helper to clear rate limit cache, primarily for testing purposes."""
         self._storage.clear()
@@ -58,3 +70,48 @@ def get_client_ip(request: Request) -> str:
         return x_real_ip.strip()
         
     return request.client.host if request.client else "127.0.0.1"
+
+async def check_login_rate_limit(request: Request, user_in: UserCreate) -> None:
+    """FastAPI dependency to enforce independent IP and email sliding-window rate limits on login."""
+    ip = get_client_ip(request)
+    email = user_in.email
+    
+    # 1. Enforce IP-based limit
+    ip_key = f"ip:{ip}"
+    allowed_ip, retry_ip = limiter_storage.check_and_add(
+        ip_key, 
+        settings.RATE_LIMIT_LOGIN_IP_LIMIT, 
+        settings.RATE_LIMIT_LOGIN_IP_WINDOW
+    )
+    if not allowed_ip:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            headers={"Retry-After": str(retry_ip)},
+            detail={
+                "error": {
+                    "code": "RATE_LIMITED",
+                    "message": f"Too many requests from this IP. Please try again in {retry_ip} seconds.",
+                    "retry_after": retry_ip
+                }
+            }
+        )
+        
+    # 2. Enforce Email-based limit
+    email_key = f"email:{email}"
+    allowed_email, retry_email = limiter_storage.check_and_add(
+        email_key, 
+        settings.RATE_LIMIT_LOGIN_EMAIL_LIMIT, 
+        settings.RATE_LIMIT_LOGIN_EMAIL_WINDOW
+    )
+    if not allowed_email:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            headers={"Retry-After": str(retry_email)},
+            detail={
+                "error": {
+                    "code": "RATE_LIMITED",
+                    "message": f"Too many login attempts for this email. Please try again in {retry_email} seconds.",
+                    "retry_after": retry_email
+                }
+            }
+        )

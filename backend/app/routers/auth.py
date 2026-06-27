@@ -7,6 +7,7 @@ from app.models.user import User
 from app.schemas.user import UserCreate, UserResponse, Token
 from app.auth.utils import hash_password, verify_password, validate_email_format
 from app.auth.jwt import create_access_token
+from app.auth.rate_limiter import check_login_rate_limit, limiter_storage
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -78,6 +79,7 @@ async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
     "/login",
     response_model=Token,
     status_code=status.HTTP_200_OK,
+    dependencies=[Depends(check_login_rate_limit)],
     summary="User login",
     description="Authenticates a user via email and password, returning a signed JWT access token on success."
 )
@@ -99,7 +101,10 @@ async def login(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
             }
         )
         
-    # 3. Generate signed access token
+    # 3. Successful login - clear email-based rate limit
+    limiter_storage.clear(f"email:{user.email}")
+        
+    # 4. Generate signed access token
     access_token = create_access_token(user_id=user.id, email=user.email)
     return Token(
         access_token=access_token,

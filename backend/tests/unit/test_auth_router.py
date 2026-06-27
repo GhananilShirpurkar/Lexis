@@ -136,3 +136,43 @@ def test_login_invalid_credentials(client, mock_db):
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
     data = response.json()
     assert data["detail"]["error"]["code"] == "INVALID_CREDENTIALS"
+
+def test_login_rate_limiting(client, mock_db):
+    from app.auth.rate_limiter import limiter_storage
+    from app.config import settings
+
+    limiter_storage.reset()
+    
+    # Mock no user found for simple failing logins
+    mock_execute_result = MagicMock()
+    mock_execute_result.scalars.return_value.first.return_value = None
+    mock_db.execute.return_value = mock_execute_result
+
+    # Let's adjust settings for testing rate limits
+    original_email_limit = settings.RATE_LIMIT_LOGIN_EMAIL_LIMIT
+    settings.RATE_LIMIT_LOGIN_EMAIL_LIMIT = 2
+
+    payload = {
+        "email": "ratelimit@example.com",
+        "password": "mypassword123"
+    }
+
+    try:
+        # Attempt 1 -> 401
+        response = client.post("/auth/login", json=payload)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+        # Attempt 2 -> 401
+        response = client.post("/auth/login", json=payload)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+        # Attempt 3 -> 429 RATE_LIMITED
+        response = client.post("/auth/login", json=payload)
+        assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+        data = response.json()
+        assert data["detail"]["error"]["code"] == "RATE_LIMITED"
+        assert "Retry-After" in response.headers
+    finally:
+        # Restore settings
+        settings.RATE_LIMIT_LOGIN_EMAIL_LIMIT = original_email_limit
+
