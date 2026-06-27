@@ -6,7 +6,7 @@ class UserBase(BaseModel):
     email: EmailStr
 
 class UserCreate(UserBase):
-    password: str = Field(..., min_length=8, description="Password must be at least 8 characters long")
+    password: str = Field(..., min_length=8, max_length=72, description="Password must be between 8 and 72 characters long")
 
 class UserResponse(UserBase):
     id: uuid.UUID

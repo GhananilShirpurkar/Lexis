@@ -6,9 +6,9 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 ## 📊 Current High-Level State
 
-*   **Last Updated**: 2026-06-23
+*   **Last Updated**: 2026-06-27
 *   **Current Wave**: Wave 2 (Authentication Service)
-*   Current Task: 2.5.2: Apply authorization middleware exclusions completed.
+*   Current Task: 2.6: Implement registration and login endpoints completed.
 *   **Active Directory Layout**:
     *   Root contains: `pyproject.toml`, `main.py`, `README.md`
     *   `backend/` contains: `.python-version`, `pyproject.toml`, `alembic.ini`, `README.md`, `app/`, `migrations/`, `tests/`
@@ -30,6 +30,8 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 | Task ID | Wave | Description | Completed At | Agent | Key Code Modifications / Outputs |
 |---------|------|-------------|--------------|-------|----------------------------------|
+| **2.6.2** | Wave 2 | Create User Login API endpoint | 2026-06-27 | `backend-specialist` | Created POST /auth/login with credentials validation and JWT token issuance. |
+| **2.6.1** | Wave 2 | Create User Registration API endpoint | 2026-06-27 | `backend-specialist` | Created POST /auth/register validating email, duplicate checks, password hashing, and JWT token issuance. Enforced 72-char password max. |
 | **2.5.2** | Wave 2 | Apply authorization middleware exclusions | 2026-06-23 | `security-auditor` | Registered `JWTMiddleware` to FastAPI in `backend/app/main.py`. |
 | **2.5.1** | Wave 2 | Create authorization Bearer parsing middleware | 2026-06-23 | `security-auditor` | Created `backend/app/auth/middleware.py` parsing headers and attaching user identities. |
 | **2.4.2** | Wave 2 | Write property tests for token error scenarios (Property 5) | 2026-06-23 | `test-engineer` | Added Hypothesis test verifying invalid token decodes return None. |
@@ -116,10 +118,12 @@ This file serves as a persistent context log for the Lexis RAG system implementa
     "2.4.1",
     "2.4.2",
     "2.5.1",
-    "2.5.2"
+    "2.5.2",
+    "2.6.1",
+    "2.6.2"
   ],
   "pending_immediate_tasks": [
-    "2.6"
+    "2.7"
   ]
 }
 ```

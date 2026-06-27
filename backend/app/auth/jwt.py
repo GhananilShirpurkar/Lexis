@@ -3,7 +3,7 @@ from typing import Any
 from jose import JWTError, jwt
 from app.config import settings
 
-def create_access_token(user_id: int, email: str, expires_delta: timedelta | None = None) -> str:
+def create_access_token(user_id: Any, email: str, expires_delta: timedelta | None = None) -> str:
     """
     Generate an access token for a user.
     Defaults to 24 hours expiration.

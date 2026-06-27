@@ -1,3 +1,4 @@
+import uuid
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -64,7 +65,19 @@ class JWTMiddleware(BaseHTTPMiddleware):
             )
             
         # Attach validated user context to the request state
-        request.state.user_id = int(payload["sub"])
+        try:
+            request.state.user_id = uuid.UUID(payload["sub"])
+        except ValueError:
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "error": {
+                        "code": "UNAUTHORIZED",
+                        "message": "Invalid user identification format."
+                    }
+                }
+            )
+            
         request.state.email = payload["email"]
         
         return await call_next(request)
