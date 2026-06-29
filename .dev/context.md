@@ -8,7 +8,7 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 *   **Last Updated**: 2026-06-29
 *   **Current Wave**: Wave 3 (Document Upload, Validation & Storage)
-*   Current Task: 3.4.1: Write property test verifying namespace prefixing (Property 17) Completed.
+*   Current Task: 3.5.1: Integrate document loaders and text extraction Completed.
 *   **Active Directory Layout**:
     *   Root contains: `pyproject.toml`, `main.py`, `README.md`
     *   `backend/` contains: `.python-version`, `pyproject.toml`, `alembic.ini`, `README.md`, `app/`, `migrations/`, `tests/`
@@ -33,6 +33,7 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 | Task ID | Wave | Description | Completed At | Agent | Key Code Modifications / Outputs |
 |---------|------|-------------|--------------|-------|----------------------------------|
+| **3.5.1** | Wave 3 | Integrate document loaders and text extraction | 2026-06-29 | `backend-specialist` | Created `backend/app/rag/pipeline.py` implementing `index_document` with LlamaIndex file loading, chunking, and index build. Rejects empty/whitespace documents with `ValueError("EMPTY_DOCUMENT")`. |
 | **3.4.1** | Wave 3 | Write property test verifying namespace prefixing (Property 17) | 2026-06-29 | `test-engineer` | Created `backend/tests/unit/test_authorization.py` containing Hypothesis property tests verifying R2 storage key user prefixing and complete namespace isolation between different users. |
 | **3.3.2** | Wave 3 | Implement file upload and delete methods | 2026-06-29 | `backend-specialist` | Implemented `upload_file` and `delete_file` methods with object keys matching user prefix formatting `{user_id}/{doc_id}/{filename}` in `backend/app/storage/r2_client.py`. |
 | **3.3.1** | Wave 3 | Configure boto3 S3 client connection mappings | 2026-06-29 | `backend-specialist` | Created `backend/app/storage/r2_client.py` initializing boto3 S3 client with s3v4 signature configuration, custom endpoint URL mappings, and fallback mock support. |
@@ -140,10 +141,11 @@ This file serves as a persistent context log for the Lexis RAG system implementa
     "3.2.1",
     "3.3.1",
     "3.3.2",
-    "3.4.1"
+    "3.4.1",
+    "3.5.1"
   ],
   "pending_immediate_tasks": [
-    "3.5.1"
+    "3.5.2"
   ]
 }
 ```
