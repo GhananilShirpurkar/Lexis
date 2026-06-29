@@ -6,9 +6,9 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 ## 📊 Current High-Level State
 
-*   **Last Updated**: 2026-06-27
+*   **Last Updated**: 2026-06-29
 *   **Current Wave**: Wave 3 (Document Upload, Validation & Storage)
-*   Current Task: 3.1.2: Write file size limits verification checks completed.
+*   Current Task: 3.2.1: Write property tests for file boundaries (Property 7) Completed.
 *   **Active Directory Layout**:
     *   Root contains: `pyproject.toml`, `main.py`, `README.md`
     *   `backend/` contains: `.python-version`, `pyproject.toml`, `alembic.ini`, `README.md`, `app/`, `migrations/`, `tests/`
@@ -17,10 +17,13 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 ---
 
-## 🛠️ Architectural & System Decisions
+## 🛠️ Architectural & System Decisions 
 
 *   **Backend Isolation**: Nested backend application under `backend/` directory for clean separation.
 *   **DB Migration**: Alembic configured for handling PostgreSQL migrations.
+*   **Database URL & Query Sanitization**: Programmatically strip all query parameters (e.g. `channel_binding=require`, `sslmode=require`) from the connection URL to prevent `asyncpg` keyword argument crashes, while dynamically injecting `ssl=True` in the engine `connect_args`.
+*   **Direct Bcrypt Hashing**: Bypassed `passlib` context wrappers due to compatibility bugs with modern `bcrypt` versions (e.g., `AttributeError: module 'bcrypt' has no attribute '__about__'`) and transitioned to direct `bcrypt` hashing/verification with a default salt factor of 12.
+*   **Startup Schema Alignment**: Configured a connection-safe database setup hook in `main.py` that verifies schema completeness and automatically builds missing tables without transaction abortion conflicts.
 *   **Local Storage R2 Mocking**: Local filesystem storage simulator will be implemented first, followed by Cloudflare R2 client integration.
 *   **LLM Provider Mocking**: Offline mock provider first for testing, then live integration.
 
@@ -30,6 +33,8 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 | Task ID | Wave | Description | Completed At | Agent | Key Code Modifications / Outputs |
 |---------|------|-------------|--------------|-------|----------------------------------|
+| **3.2.1** | Wave 3 | Write property tests for file boundaries (Property 7) | 2026-06-29 | `test-engineer` | Added Hypothesis property-based testing suites for whitelisted/unsupported formats and size boundaries in `test_document_validation.py`. |
+| **N/A** | Wave 3 | Stabilize database connections, URL parameters, and password hashing | 2026-06-29 | `debugger` | Stripped query parameters from connection URL, bypassed passlib for direct bcrypt, and added separate startup transaction blocks for schema alignment. |
 | **3.1.2** | Wave 3 | Write file size limits verification checks | 2026-06-27 | `backend-specialist` | Extended `backend/app/documents/validation.py` to validate sizes between 1B and 50MB using headers and actual read sizes. |
 | **3.1.1** | Wave 3 | Write file extension and mime type validation filters | 2026-06-27 | `backend-specialist` | Created `backend/app/documents/validation.py` verifying file formats and MIME types against allowed whitelist. |
 | **2.7.2** | Wave 2 | Wire login rate limiter with authentication router | 2026-06-27 | `backend-specialist` | Integrated rate limit dependency into POST /auth/login and cleared email history on successful auth. |
@@ -128,10 +133,11 @@ This file serves as a persistent context log for the Lexis RAG system implementa
     "2.7.1",
     "2.7.2",
     "3.1.1",
-    "3.1.2"
+    "3.1.2",
+    "3.2.1"
   ],
   "pending_immediate_tasks": [
-    "3.2.1"
+    "3.3.1"
   ]
 }
 ```
