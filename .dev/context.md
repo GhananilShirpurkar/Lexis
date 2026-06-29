@@ -8,7 +8,7 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 *   **Last Updated**: 2026-06-29
 *   **Current Wave**: Wave 3 (Document Upload, Validation & Storage)
-*   Current Task: 3.3.1: Configure boto3 S3 client connection mappings Completed.
+*   Current Task: 3.3.2: Implement file upload and delete methods Completed.
 *   **Active Directory Layout**:
     *   Root contains: `pyproject.toml`, `main.py`, `README.md`
     *   `backend/` contains: `.python-version`, `pyproject.toml`, `alembic.ini`, `README.md`, `app/`, `migrations/`, `tests/`
@@ -33,6 +33,7 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 | Task ID | Wave | Description | Completed At | Agent | Key Code Modifications / Outputs |
 |---------|------|-------------|--------------|-------|----------------------------------|
+| **3.3.2** | Wave 3 | Implement file upload and delete methods | 2026-06-29 | `backend-specialist` | Implemented `upload_file` and `delete_file` methods with object keys matching user prefix formatting `{user_id}/{doc_id}/{filename}` in `backend/app/storage/r2_client.py`. |
 | **3.3.1** | Wave 3 | Configure boto3 S3 client connection mappings | 2026-06-29 | `backend-specialist` | Created `backend/app/storage/r2_client.py` initializing boto3 S3 client with s3v4 signature configuration, custom endpoint URL mappings, and fallback mock support. |
 | **3.2.1** | Wave 3 | Write property tests for file boundaries (Property 7) | 2026-06-29 | `test-engineer` | Added Hypothesis property-based testing suites for whitelisted/unsupported formats and size boundaries in `test_document_validation.py`. |
 | **N/A** | Wave 3 | Stabilize database connections, URL parameters, and password hashing | 2026-06-29 | `debugger` | Stripped query parameters from connection URL, bypassed passlib for direct bcrypt, and added separate startup transaction blocks for schema alignment. |
@@ -136,10 +137,11 @@ This file serves as a persistent context log for the Lexis RAG system implementa
     "3.1.1",
     "3.1.2",
     "3.2.1",
-    "3.3.1"
+    "3.3.1",
+    "3.3.2"
   ],
   "pending_immediate_tasks": [
-    "3.3.2"
+    "3.4.1"
   ]
 }
 ```

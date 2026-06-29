@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from app.storage.r2_client import get_r2_client
+from botocore.exceptions import ClientError
+from app.storage.r2_client import get_r2_client, upload_file, delete_file
 
 def test_get_r2_client_force_mock():
     """Verify that forcing mock returns a MagicMock instance."""
@@ -44,3 +45,87 @@ def test_get_r2_client_correct_mappings(mock_boto_client):
     # Verify s3v4 signature configuration
     config = kwargs["config"]
     assert config.signature_version == "s3v4"
+
+
+@patch("app.storage.r2_client.get_r2_client")
+def test_upload_file_mock_mode(mock_get_client):
+    """Verify that upload_file works and returns key in mock mode."""
+    mock_get_client.return_value = MagicMock()
+    key = upload_file(user_id=1, doc_id=42, filename="doc.pdf", data=b"hello")
+    assert key == "1/42/doc.pdf"
+
+
+@patch("app.storage.r2_client.get_r2_client")
+def test_upload_file_real_client(mock_get_client):
+    """Verify upload_file invokes put_object on the actual client."""
+    mock_s3 = MagicMock()
+    mock_get_client.return_value = mock_s3
+    # Make sure mock_s3 doesn't look like MagicMock class itself in type check
+    # by ensuring isinstance(mock_s3, MagicMock) is False, or simply bypassing MagicMock type check
+    # Wait, in r2_client.py: `isinstance(client, MagicMock)` checks if it's MagicMock
+    # MagicMock instance indeed satisfies isinstance(mock_s3, MagicMock).
+    # To mock a real boto3 client, we can make `isinstance(client, MagicMock)` return False.
+    # But wait, MagicMock is a subclass of Mock, etc.
+    # Let's mock `get_r2_client` to return a custom object that is NOT MagicMock but mocks the S3 client.
+    class DummyS3Client:
+        def __init__(self):
+            self.put_object = MagicMock()
+            self.delete_object = MagicMock()
+    
+    dummy_s3 = DummyS3Client()
+    mock_get_client.return_value = dummy_s3
+
+    key = upload_file(user_id=123, doc_id=456, filename="test.txt", data=b"my-data")
+    assert key == "123/456/test.txt"
+    dummy_s3.put_object.assert_called_once_with(
+        Bucket="lexis-storage",
+        Key="123/456/test.txt",
+        Body=b"my-data",
+        ContentType="text/plain"
+    )
+
+
+@patch("app.storage.r2_client.get_r2_client")
+def test_delete_file_real_client(mock_get_client):
+    """Verify delete_file invokes delete_object on the actual client."""
+    class DummyS3Client:
+        def __init__(self):
+            self.delete_object = MagicMock()
+    
+    dummy_s3 = DummyS3Client()
+    mock_get_client.return_value = dummy_s3
+
+    delete_file("123/456/test.txt")
+    dummy_s3.delete_object.assert_called_once_with(
+        Bucket="lexis-storage",
+        Key="123/456/test.txt"
+    )
+
+
+@patch("app.storage.r2_client.get_r2_client")
+def test_upload_file_client_error(mock_get_client):
+    """Verify that upload_file raises ClientError if put_object fails."""
+    class DummyS3Client:
+        def put_object(self, **kwargs):
+            raise ClientError({"Error": {"Code": "500", "Message": "Internal Server Error"}}, "PutObject")
+
+    dummy_s3 = DummyS3Client()
+    mock_get_client.return_value = dummy_s3
+
+    with pytest.raises(ClientError):
+        upload_file(user_id=123, doc_id=456, filename="test.txt", data=b"my-data")
+
+
+@patch("app.storage.r2_client.get_r2_client")
+def test_delete_file_client_error(mock_get_client):
+    """Verify that delete_file raises ClientError if delete_object fails."""
+    class DummyS3Client:
+        def delete_object(self, **kwargs):
+            raise ClientError({"Error": {"Code": "500", "Message": "Internal Server Error"}}, "DeleteObject")
+
+    dummy_s3 = DummyS3Client()
+    mock_get_client.return_value = dummy_s3
+
+    with pytest.raises(ClientError):
+        delete_file("123/456/test.txt")
+
