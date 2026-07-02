@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -110,3 +110,26 @@ async def login(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
         access_token=access_token,
         token_type="bearer"
     )
+
+@router.get(
+    "/me",
+    response_model=UserResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get current user details",
+    description="Returns the authenticated user details using the JWT context attached by JWTMiddleware."
+)
+async def get_me(request: Request, db: AsyncSession = Depends(get_db)):
+    query = select(User).where(User.id == request.state.user_id)
+    result = await db.execute(query)
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": {
+                    "code": "USER_NOT_FOUND",
+                    "message": "User not found."
+                }
+            }
+        )
+    return user

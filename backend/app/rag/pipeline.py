@@ -1,8 +1,11 @@
 import os
 import tempfile
+import shutil
 from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, Settings
 from llama_index.core.llms.mock import MockLLM
 from llama_index.core.embeddings.mock import MockEmbedding
+from llama_index.core.node_parser import SentenceSplitter
+from app.config import settings
 
 # Global configuration to avoid default OpenAI API key errors
 Settings.llm = MockLLM()
@@ -16,7 +19,8 @@ def index_document(
 ) -> dict:
     """
     Parses document bytes according to its extension using LlamaIndex readers.
-    Chunks the document using default LlamaIndex settings, and indexes the document nodes.
+    Chunks the document using SentenceSplitter, and indexes the document nodes.
+    Serializes the index locally under {STORAGE_INDICES_DIR}/{user_id}/{doc_id}.
     Returns a dictionary with the index reference, full text, and initial summary.
     """
     _, ext = os.path.splitext(filename)
@@ -36,8 +40,16 @@ def index_document(
         if not full_text:
             raise ValueError("EMPTY_DOCUMENT")
 
-        # Build index
-        index = VectorStoreIndex.from_documents(documents)
+        # Build index with SentenceSplitter
+        splitter = SentenceSplitter()
+        index = VectorStoreIndex.from_documents(documents, transformations=[splitter])
+
+        # Serialize index locally under storage/indices/{user_id}/{doc_id}
+        persist_dir = os.path.join(settings.STORAGE_INDICES_DIR, str(user_id), str(doc_id))
+        if os.path.exists(persist_dir):
+            shutil.rmtree(persist_dir)
+        os.makedirs(persist_dir, exist_ok=True)
+        index.storage_context.persist(persist_dir=persist_dir)
 
         # Generate a placeholder summary
         summary = f"Summary of {filename}: {full_text[:200]}..."

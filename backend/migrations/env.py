@@ -24,6 +24,26 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from app.db.base import Base
 target_metadata = Base.metadata
 
+# Configure the database URL dynamically for Alembic
+from app.config import settings
+database_url = settings.DATABASE_URL
+if database_url.startswith("postgresql://"):
+    database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+# Handle query parameters for asyncpg (strip query string and enforce SSL if requested)
+connect_args = {}
+if "?" in database_url:
+    import urllib.parse as urlparse
+    parsed = urlparse.urlparse(database_url)
+    query = urlparse.parse_qs(parsed.query)
+    sslmode = query.get("sslmode", [None])[0]
+    if sslmode in ["require", "prefer", "allow", "verify-ca", "verify-full"] or "ssl=true" in database_url.lower():
+        connect_args["ssl"] = True
+    parsed = parsed._replace(query="")
+    database_url = urlparse.urlunparse(parsed)
+
+config.set_main_option("sqlalchemy.url", database_url)
+
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
@@ -71,6 +91,7 @@ async def run_async_migrations() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
 
     async with connectable.connect() as connection:

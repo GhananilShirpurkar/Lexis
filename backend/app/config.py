@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     RATE_LIMIT_LOGIN_EMAIL_LIMIT: int = 5
     RATE_LIMIT_LOGIN_EMAIL_WINDOW: int = 900
 
+    # Local index storage path configuration
+    STORAGE_INDICES_DIR: str = "storage/indices"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

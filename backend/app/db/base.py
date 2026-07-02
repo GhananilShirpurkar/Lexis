@@ -1,8 +1,4 @@
-from sqlalchemy.orm import DeclarativeBase
-
-class Base(DeclarativeBase):
-    """Base class for all SQLAlchemy ORM models."""
-    pass
+from app.db.base_class import Base
 
 # Import all models to register them on Base.metadata
 from app.models.user import User
