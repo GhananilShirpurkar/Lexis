@@ -6,6 +6,7 @@ from llama_index.core.llms.mock import MockLLM
 from llama_index.core.embeddings.mock import MockEmbedding
 from llama_index.core.node_parser import SentenceSplitter
 from app.config import settings
+from app.storage.r2_client import delete_file
 
 # Global configuration to avoid default OpenAI API key errors
 Settings.llm = MockLLM()
@@ -59,6 +60,23 @@ def index_document(
             "text": full_text,
             "index": index
         }
+    except Exception as e:
+        # Rollback uploaded file from storage (Tigris)
+        r2_key = f"{user_id}/{doc_id}/{filename}"
+        try:
+            delete_file(r2_key)
+        except Exception:
+            pass
+
+        # Cleanup local persistent directory if it exists
+        persist_dir = os.path.join(settings.STORAGE_INDICES_DIR, str(user_id), str(doc_id))
+        if os.path.exists(persist_dir):
+            try:
+                shutil.rmtree(persist_dir)
+            except Exception:
+                pass
+
+        raise e
     finally:
         # Cleanup temporary files
         if os.path.exists(tmp_path):

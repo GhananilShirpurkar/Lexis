@@ -15,21 +15,26 @@ def get_r2_client(
     force_mock: bool = False
 ):
     """
-    Constructs and returns a boto3 S3 client configured for Cloudflare R2.
+    Constructs and returns a boto3 S3 client configured for Tigris/S3.
     If credentials are not provided (or settings are empty), returns a mock client.
     """
     if force_mock:
         return MagicMock()
 
-    acc_id = account_id or settings.R2_ACCOUNT_ID
-    key_id = access_key_id or settings.R2_ACCESS_KEY_ID
-    sec_key = secret_access_key or settings.R2_SECRET_ACCESS_KEY
+    acc_id = account_id or settings.ENDPOINT_URL_S3
+    key_id = access_key_id or settings.TIGRIS_ACCESS_KEY_ID
+    sec_key = secret_access_key or settings.TIGRIS_SECRET_KEY
 
     # Fallback to mock if credentials are not fully configured
     if not all([acc_id, key_id, sec_key]):
         return MagicMock()
 
-    endpoint_url = f"https://{acc_id}.r2.cloudflarestorage.com"
+    # Resolve endpoint URL: full URLs (like Tigris) are used as-is, else fallback to R2 subdomain format
+    if acc_id.startswith("http://") or acc_id.startswith("https://"):
+        endpoint_url = acc_id
+    else:
+        endpoint_url = f"https://{acc_id}.r2.cloudflarestorage.com"
+
     config = Config(signature_version="s3v4")
 
     return boto3.client(
@@ -48,7 +53,7 @@ def upload_file(
     content_type: str | None = None
 ) -> str:
     """
-    Uploads file content to Cloudflare R2 bucket.
+    Uploads file content to the Tigris/S3 bucket.
     Returns the key prefix: {user_id}/{doc_id}/{filename}
     """
     key = f"{user_id}/{doc_id}/{filename}"
@@ -67,20 +72,20 @@ def upload_file(
 
     try:
         client.put_object(
-            Bucket=settings.R2_BUCKET_NAME,
+            Bucket=settings.S3_BUCKET_NAME,
             Key=key,
             Body=data,
             ContentType=content_type
         )
     except ClientError as e:
-        logger.error(f"Failed to upload file {key} to R2: {e}")
+        logger.error(f"Failed to upload file {key} to Tigris: {e}")
         raise e
 
     return key
 
 def delete_file(r2_key: str) -> None:
     """
-    Deletes file from Cloudflare R2 bucket using the object key.
+    Deletes file from the Tigris/S3 bucket using the object key.
     """
     client = get_r2_client()
 
@@ -90,10 +95,10 @@ def delete_file(r2_key: str) -> None:
 
     try:
         client.delete_object(
-            Bucket=settings.R2_BUCKET_NAME,
+            Bucket=settings.S3_BUCKET_NAME,
             Key=r2_key
         )
     except ClientError as e:
-        logger.error(f"Failed to delete file {r2_key} from R2: {e}")
+        logger.error(f"Failed to delete file {r2_key} from Tigris: {e}")
         raise e
 

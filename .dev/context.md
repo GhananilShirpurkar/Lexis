@@ -6,9 +6,9 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 ## 📊 Current High-Level State
 
-*   **Last Updated**: 2026-06-29
+*   **Last Updated**: 2026-07-02
 *   **Current Wave**: Wave 3 (Document Upload, Validation & Storage)
-*   Current Task: 3.5.2: Implement LlamaIndex vector store compilation Completed.
+*   **Current Task**: 3.6.1: Write property test verifying document parser states (Property 22)
 *   **Active Directory Layout**:
     *   Root contains: `pyproject.toml`, `main.py`, `README.md`
     *   `backend/` contains: `.python-version`, `pyproject.toml`, `alembic.ini`, `README.md`, `app/`, `migrations/`, `tests/`
@@ -24,7 +24,7 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 *   **Database URL & Query Sanitization**: Programmatically strip all query parameters (e.g. `channel_binding=require`, `sslmode=require`) from the connection URL to prevent `asyncpg` keyword argument crashes, while dynamically injecting `ssl=True` in the engine `connect_args`.
 *   **Direct Bcrypt Hashing**: Bypassed `passlib` context wrappers due to compatibility bugs with modern `bcrypt` versions (e.g., `AttributeError: module 'bcrypt' has no attribute '__about__'`) and transitioned to direct `bcrypt` hashing/verification with a default salt factor of 12.
 *   **Startup Schema Alignment**: Configured a connection-safe database setup hook in `main.py` that verifies schema completeness and automatically builds missing tables without transaction abortion conflicts.
-*   **Local Storage R2 Mocking**: Local filesystem storage simulator will be implemented first, followed by Cloudflare R2 client integration.
+*   **Storage Integration**: Transitioned storage layer from Cloudflare R2 to Tigris S3 storage. Refactored the settings and the S3 client wrapper in `r2_client.py` to seamlessly connect to the Tigris custom endpoint while maintaining backward compatibility with standard boto3 signatures.
 *   **LLM Provider Mocking**: Offline mock provider first for testing, then live integration.
 
 ---
@@ -33,6 +33,7 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 | Task ID | Wave | Description | Completed At | Agent | Key Code Modifications / Outputs |
 |---------|------|-------------|--------------|-------|----------------------------------|
+| **3.5.3** | Wave 3 | Implement indexing failure rollbacks | 2026-07-02 | `backend-specialist` | Added exception handlers in `backend/app/rag/pipeline.py` that catch indexing failures, invoke `delete_file` to remove the uploaded file from Tigris/S3 storage, clean up partial local index persistent directories, and propagate the original exception. Added `test_index_document_failure_rollback` test verifying correct cleanup behavior. |
 | **3.5.2** | Wave 3 | Implement LlamaIndex vector store compilation | 2026-07-02 | `backend-specialist` | Updated `backend/app/rag/pipeline.py` to chunk documents with `SentenceSplitter` and serialize compiled indices to local directory `STORAGE_INDICES_DIR/{user_id}/{doc_id}`. Added `STORAGE_INDICES_DIR` to `Settings`. Updated `test_pipeline.py` to assert disk serialization and override behavior. |
 | **3.5.1** | Wave 3 | Integrate document loaders and text extraction | 2026-06-29 | `backend-specialist` | Created `backend/app/rag/pipeline.py` implementing `index_document` with LlamaIndex file loading, chunking, and index build. Rejects empty/whitespace documents with `ValueError("EMPTY_DOCUMENT")`. |
 | **3.4.1** | Wave 3 | Write property test verifying namespace prefixing (Property 17) | 2026-06-29 | `test-engineer` | Created `backend/tests/unit/test_authorization.py` containing Hypothesis property tests verifying R2 storage key user prefixing and complete namespace isolation between different users. |
@@ -144,10 +145,11 @@ This file serves as a persistent context log for the Lexis RAG system implementa
     "3.3.2",
     "3.4.1",
     "3.5.1",
-    "3.5.2"
+    "3.5.2",
+    "3.5.3"
   ],
   "pending_immediate_tasks": [
-    "3.5.3"
+    "3.6.1"
   ]
 }
 ```

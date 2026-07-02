@@ -76,3 +76,32 @@ def test_index_document_whitespace():
     with pytest.raises(ValueError, match="EMPTY_DOCUMENT"):
         index_document(file_bytes, filename, user_id, doc_id)
 
+from unittest.mock import patch
+
+@patch("app.rag.pipeline.delete_file")
+@patch("app.rag.pipeline.VectorStoreIndex.from_documents")
+def test_index_document_failure_rollback(mock_from_documents, mock_delete_file, monkeypatch, tmp_path):
+    """Verify that a failure during indexing triggers Tigris cleanup and local index directory cleanup."""
+    monkeypatch.setattr(settings, "STORAGE_INDICES_DIR", str(tmp_path))
+
+    mock_from_documents.side_effect = Exception("Mock database or indexing error")
+
+    file_bytes = b"Some valid document content to trigger the pipeline."
+    filename = "test_doc.txt"
+    user_id = 123
+    doc_id = 456
+
+    persist_dir = os.path.join(str(tmp_path), str(user_id), str(doc_id))
+    # Pre-create directory to verify cleanup
+    os.makedirs(persist_dir, exist_ok=True)
+    assert os.path.exists(persist_dir)
+
+    with pytest.raises(Exception, match="Mock database or indexing error"):
+        index_document(file_bytes, filename, user_id, doc_id)
+
+    # Verify S3/Tigris rollback delete_file was called
+    mock_delete_file.assert_called_once_with(f"{user_id}/{doc_id}/{filename}")
+
+    # Verify local directory cleanup occurred
+    assert not os.path.exists(persist_dir)
+

@@ -8,11 +8,11 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
-    # Cloudflare R2 configurations
-    R2_BUCKET_NAME: str = "lexis-storage"
-    R2_ACCOUNT_ID: str = ""
-    R2_ACCESS_KEY_ID: str = ""
-    R2_SECRET_ACCESS_KEY: str = ""
+    # S3 Storage (Tigris) Configuration
+    S3_BUCKET_NAME: str = "lexis"
+    ENDPOINT_URL_S3: str = "https://fly.storage.tigris.dev"
+    TIGRIS_ACCESS_KEY_ID: str = ""
+    TIGRIS_SECRET_KEY: str = ""
     
     # LLM API configuration options
     GEMINI_API_KEY: str = ""
