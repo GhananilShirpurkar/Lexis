@@ -7,6 +7,59 @@ from llama_index.core.embeddings.mock import MockEmbedding
 from llama_index.core.node_parser import SentenceSplitter
 from app.config import settings
 from app.storage.r2_client import delete_file
+import logging
+import google.generativeai as genai
+from groq import Groq
+
+logger = logging.getLogger(__name__)
+
+SUMMARIZATION_PROMPT = (
+    "You are an expert summarizer. Summarize the following document.\n"
+    "Document name: {filename}\n"
+    "Document content:\n"
+    "{text}\n\n"
+    "Guidelines:\n"
+    "- Provide a plain-text summary describing the contents.\n"
+    "- Do not use markdown formatting (like bold, italics, bullets, headers). Use plain text paragraphs.\n"
+    "- The summary must be strictly under 150 words and under 5000 characters.\n"
+)
+
+def generate_summary(text: str, filename: str) -> str:
+    """
+    Generates a summary of the document using LLM.
+    Attempts Gemini first, falls back to Groq if Gemini fails or is unconfigured,
+    and falls back to an empty string if both fail or are unconfigured.
+    Truncates input text to 10,000 characters for token efficiency.
+    """
+    truncated_text = text[:10000]
+    prompt = SUMMARIZATION_PROMPT.format(filename=filename, text=truncated_text)
+
+    # 1. Try Gemini
+    if settings.GEMINI_API_KEY:
+        try:
+            genai.configure(api_key=settings.GEMINI_API_KEY)
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            response = model.generate_content(prompt)
+            if response and response.text:
+                return response.text.strip()
+        except Exception as e:
+            logger.warning(f"Gemini summarization failed, trying Groq: {e}")
+
+    # 2. Try Groq (Fallback)
+    if settings.GROQ_API_KEY:
+        try:
+            client = Groq(api_key=settings.GROQ_API_KEY)
+            completion = client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model="llama3-8b-8192",
+            )
+            if completion and completion.choices and completion.choices[0].message.content:
+                return completion.choices[0].message.content.strip()
+        except Exception as e:
+            logger.warning(f"Groq summarization failed: {e}")
+
+    # 3. Final fallback: empty string
+    return ""
 
 # Global configuration to avoid default OpenAI API key errors
 Settings.llm = MockLLM()
@@ -52,8 +105,8 @@ def index_document(
         os.makedirs(persist_dir, exist_ok=True)
         index.storage_context.persist(persist_dir=persist_dir)
 
-        # Generate a placeholder summary
-        summary = f"Summary of {filename}: {full_text[:200]}..."
+        # Generate summary using the LLM provider pipeline
+        summary = generate_summary(full_text, filename)
 
         return {
             "summary": summary,

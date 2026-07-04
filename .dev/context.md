@@ -8,7 +8,7 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 *   **Last Updated**: 2026-07-04
 *   **Current Wave**: Wave 3 (Document Upload, Validation & Storage)
-*   **Current Task**: 3.7.1: Write summary generation LLM provider prompts
+*   **Current Task**: 3.8.1: Write property test verifying summary limits (Property 13)
 *   **Active Directory Layout**:
     *   Root contains: `pyproject.toml`, `main.py`, `README.md`
     *   `backend/` contains: `.python-version`, `pyproject.toml`, `alembic.ini`, `README.md`, `app/`, `migrations/`, `tests/`
@@ -33,6 +33,8 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 | Task ID | Wave | Description | Completed At | Agent | Key Code Modifications / Outputs |
 |---------|------|-------------|--------------|-------|----------------------------------|
+| **3.7.2** | Wave 3 | Write generation error fallback logic | 2026-07-04 | `backend-specialist` | Implemented try-except error handling inside `generate_summary` that cascades from Gemini to Groq, and gracefully defaults to an empty string on ultimate failure. Truncated inputs to 10,000 characters. |
+| **3.7.1** | Wave 3 | Write summary generation LLM provider prompts | 2026-07-04 | `backend-specialist` | Implemented `generate_summary` function in `backend/app/rag/pipeline.py` with custom text-only prompt requesting cohesive paragraphs (<=150 words, <=5000 chars) describing the document's content. |
 | **3.6.1** | Wave 3 | Write property test verifying document parser states | 2026-07-04 | `test-engineer` | Created `backend/tests/unit/test_rag_pipeline.py` containing Hypothesis property-based tests verifying that empty or whitespace-only documents always throw `ValueError("EMPTY_DOCUMENT")` during index parsing. |
 | **3.5.3** | Wave 3 | Implement indexing failure rollbacks | 2026-07-02 | `backend-specialist` | Added exception handlers in `backend/app/rag/pipeline.py` that catch indexing failures, invoke `delete_file` to remove the uploaded file from Tigris/S3 storage, clean up partial local index persistent directories, and propagate the original exception. Added `test_index_document_failure_rollback` test verifying correct cleanup behavior. |
 | **3.5.2** | Wave 3 | Implement LlamaIndex vector store compilation | 2026-07-02 | `backend-specialist` | Updated `backend/app/rag/pipeline.py` to chunk documents with `SentenceSplitter` and serialize compiled indices to local directory `STORAGE_INDICES_DIR/{user_id}/{doc_id}`. Added `STORAGE_INDICES_DIR` to `Settings`. Updated `test_pipeline.py` to assert disk serialization and override behavior. |
@@ -148,10 +150,12 @@ This file serves as a persistent context log for the Lexis RAG system implementa
     "3.5.1",
     "3.5.2",
     "3.5.3",
-    "3.6.1"
+    "3.6.1",
+    "3.7.1",
+    "3.7.2"
   ],
   "pending_immediate_tasks": [
-    "3.7.1"
+    "3.8.1"
   ]
 }
 ```

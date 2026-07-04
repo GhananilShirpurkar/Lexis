@@ -4,7 +4,10 @@ from app.config import settings
 from app.rag.pipeline import index_document
 from llama_index.core import VectorStoreIndex
 
-def test_index_document_txt(monkeypatch, tmp_path):
+from unittest.mock import patch
+
+@patch("app.rag.pipeline.generate_summary")
+def test_index_document_txt(mock_generate, monkeypatch, tmp_path):
     """Verify that index_document correctly parses and indexes a txt document."""
     # Override STORAGE_INDICES_DIR to use a temp directory during test
     monkeypatch.setattr(settings, "STORAGE_INDICES_DIR", str(tmp_path))
@@ -14,6 +17,7 @@ def test_index_document_txt(monkeypatch, tmp_path):
     user_id = 123
     doc_id = 456
 
+    mock_generate.return_value = f"Summary of {filename}: Hello, this is a test document content."
     result = index_document(file_bytes, filename, user_id, doc_id)
 
     assert "summary" in result
@@ -31,7 +35,8 @@ def test_index_document_txt(monkeypatch, tmp_path):
     assert len(files) > 0
     assert any(f.endswith(".json") for f in files)
 
-def test_index_document_override(monkeypatch, tmp_path):
+@patch("app.rag.pipeline.generate_summary")
+def test_index_document_override(mock_generate, monkeypatch, tmp_path):
     """Verify that calling index_document overrides the existing directory if it exists."""
     monkeypatch.setattr(settings, "STORAGE_INDICES_DIR", str(tmp_path))
 
@@ -40,6 +45,7 @@ def test_index_document_override(monkeypatch, tmp_path):
     user_id = 123
     doc_id = 456
 
+    mock_generate.return_value = "Summary"
     # First call
     index_document(file_bytes, filename, user_id, doc_id)
     persist_dir = os.path.join(str(tmp_path), str(user_id), str(doc_id))
@@ -80,7 +86,8 @@ from unittest.mock import patch
 
 @patch("app.rag.pipeline.delete_file")
 @patch("app.rag.pipeline.VectorStoreIndex.from_documents")
-def test_index_document_failure_rollback(mock_from_documents, mock_delete_file, monkeypatch, tmp_path):
+@patch("app.rag.pipeline.generate_summary")
+def test_index_document_failure_rollback(mock_generate, mock_from_documents, mock_delete_file, monkeypatch, tmp_path):
     """Verify that a failure during indexing triggers Tigris cleanup and local index directory cleanup."""
     monkeypatch.setattr(settings, "STORAGE_INDICES_DIR", str(tmp_path))
 
@@ -104,4 +111,103 @@ def test_index_document_failure_rollback(mock_from_documents, mock_delete_file, 
 
     # Verify local directory cleanup occurred
     assert not os.path.exists(persist_dir)
+
+
+from unittest.mock import MagicMock
+from app.rag.pipeline import generate_summary
+
+@patch("app.rag.pipeline.genai.GenerativeModel")
+@patch("app.rag.pipeline.genai.configure")
+def test_generate_summary_gemini_success(mock_configure, mock_model_class, monkeypatch):
+    """Verify that generate_summary successfully uses Gemini when API key is set."""
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "dummy-gemini-key")
+    monkeypatch.setattr(settings, "GROQ_API_KEY", "")
+
+    mock_model = MagicMock()
+    mock_response = MagicMock()
+    mock_response.text = "This is a Gemini summary"
+    mock_model.generate_content.return_value = mock_response
+    mock_model_class.return_value = mock_model
+
+    summary = generate_summary("Some document content", "test.txt")
+    assert summary == "This is a Gemini summary"
+    mock_configure.assert_called_once_with(api_key="dummy-gemini-key")
+    mock_model_class.assert_called_once_with("gemini-1.5-flash")
+    mock_model.generate_content.assert_called_once()
+
+
+@patch("app.rag.pipeline.Groq")
+@patch("app.rag.pipeline.genai.GenerativeModel")
+def test_generate_summary_gemini_fails_groq_success(mock_genai_model, mock_groq_class, monkeypatch):
+    """Verify that generate_summary falls back to Groq if Gemini fails."""
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "dummy-gemini-key")
+    monkeypatch.setattr(settings, "GROQ_API_KEY", "dummy-groq-key")
+
+    # Make Gemini raise exception
+    mock_genai_model.side_effect = Exception("Gemini connection error")
+
+    # Mock Groq client
+    mock_groq_client = MagicMock()
+    mock_completion = MagicMock()
+    mock_choice = MagicMock()
+    mock_choice.message.content = "This is a Groq summary"
+    mock_completion.choices = [mock_choice]
+    mock_groq_client.chat.completions.create.return_value = mock_completion
+    mock_groq_class.return_value = mock_groq_client
+
+    summary = generate_summary("Some document content", "test.txt")
+    assert summary == "This is a Groq summary"
+    mock_groq_class.assert_called_once_with(api_key="dummy-groq-key")
+
+
+@patch("app.rag.pipeline.Groq")
+@patch("app.rag.pipeline.genai.GenerativeModel")
+def test_generate_summary_all_fails(mock_genai_model, mock_groq_class, monkeypatch):
+    """Verify that generate_summary returns empty string when both APIs fail."""
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "dummy-gemini-key")
+    monkeypatch.setattr(settings, "GROQ_API_KEY", "dummy-groq-key")
+
+    mock_genai_model.side_effect = Exception("Gemini error")
+    mock_groq_client = MagicMock()
+    mock_groq_client.chat.completions.create.side_effect = Exception("Groq error")
+    mock_groq_class.return_value = mock_groq_client
+
+    summary = generate_summary("Some document content", "test.txt")
+    assert summary == ""
+
+
+def test_generate_summary_no_keys(monkeypatch):
+    """Verify that generate_summary returns empty string immediately if no keys are set."""
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "")
+    monkeypatch.setattr(settings, "GROQ_API_KEY", "")
+
+    summary = generate_summary("Some document content", "test.txt")
+    assert summary == ""
+
+
+@patch("app.rag.pipeline.genai.GenerativeModel")
+@patch("app.rag.pipeline.genai.configure")
+def test_generate_summary_truncates_input(mock_configure, mock_model_class, monkeypatch):
+    """Verify that generate_summary truncates input text to 10,000 characters."""
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "dummy-gemini-key")
+    monkeypatch.setattr(settings, "GROQ_API_KEY", "")
+
+    mock_model = MagicMock()
+    mock_response = MagicMock()
+    mock_response.text = "Summary"
+    mock_model.generate_content.return_value = mock_response
+    mock_model_class.return_value = mock_model
+
+    # Text of 12,000 characters
+    long_text = "a" * 12000
+    generate_summary(long_text, "test.txt")
+
+    mock_model.generate_content.assert_called_once()
+    args, kwargs = mock_model.generate_content.call_args
+    prompt_sent = args[0]
+    
+    # Assert that prompt doesn't contain the full 12,000 characters
+    # 12,000 'a's truncated to 10,000 'a's
+    assert "a" * 10000 in prompt_sent
+    assert "a" * 10001 not in prompt_sent
 
