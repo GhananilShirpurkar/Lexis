@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 from botocore.exceptions import ClientError
 from app.storage.r2_client import get_r2_client, upload_file, delete_file
+from app.config import settings
 
 def test_get_r2_client_force_mock():
     """Verify that forcing mock returns a MagicMock instance."""
@@ -47,6 +48,36 @@ def test_get_r2_client_correct_mappings(mock_boto_client):
     assert config.signature_version == "s3v4"
 
 
+@patch("app.storage.r2_client.boto3.client")
+def test_get_r2_client_tigris_mappings(mock_boto_client):
+    """Verify that get_r2_client uses the endpoint URL as-is if it starts with http/https (Tigris case)."""
+    mock_client_instance = MagicMock()
+    mock_boto_client.return_value = mock_client_instance
+
+    endpoint_url = "https://fly.storage.tigris.dev"
+    access_key_id = "my-access-key-id"
+    secret_access_key = "my-secret-access-key"
+
+    client = get_r2_client(
+        account_id=endpoint_url,
+        access_key_id=access_key_id,
+        secret_access_key=secret_access_key
+    )
+
+    assert client == mock_client_instance
+
+    mock_boto_client.assert_called_once()
+    args, kwargs = mock_boto_client.call_args
+    
+    assert args[0] == "s3"
+    assert kwargs["endpoint_url"] == endpoint_url
+    assert kwargs["aws_access_key_id"] == access_key_id
+    assert kwargs["aws_secret_access_key"] == secret_access_key
+    
+    config = kwargs["config"]
+    assert config.signature_version == "s3v4"
+
+
 @patch("app.storage.r2_client.get_r2_client")
 def test_upload_file_mock_mode(mock_get_client):
     """Verify that upload_file works and returns key in mock mode."""
@@ -78,7 +109,7 @@ def test_upload_file_real_client(mock_get_client):
     key = upload_file(user_id=123, doc_id=456, filename="test.txt", data=b"my-data")
     assert key == "123/456/test.txt"
     dummy_s3.put_object.assert_called_once_with(
-        Bucket="lexis-storage",
+        Bucket=settings.S3_BUCKET_NAME,
         Key="123/456/test.txt",
         Body=b"my-data",
         ContentType="text/plain"
@@ -97,7 +128,7 @@ def test_delete_file_real_client(mock_get_client):
 
     delete_file("123/456/test.txt")
     dummy_s3.delete_object.assert_called_once_with(
-        Bucket="lexis-storage",
+        Bucket=settings.S3_BUCKET_NAME,
         Key="123/456/test.txt"
     )
 

@@ -6,9 +6,9 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 ## 📊 Current High-Level State
 
-*   **Last Updated**: 2026-07-02
+*   **Last Updated**: 2026-07-04
 *   **Current Wave**: Wave 3 (Document Upload, Validation & Storage)
-*   **Current Task**: 3.6.1: Write property test verifying document parser states (Property 22)
+*   **Current Task**: 3.7.1: Write summary generation LLM provider prompts
 *   **Active Directory Layout**:
     *   Root contains: `pyproject.toml`, `main.py`, `README.md`
     *   `backend/` contains: `.python-version`, `pyproject.toml`, `alembic.ini`, `README.md`, `app/`, `migrations/`, `tests/`
@@ -33,6 +33,7 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 | Task ID | Wave | Description | Completed At | Agent | Key Code Modifications / Outputs |
 |---------|------|-------------|--------------|-------|----------------------------------|
+| **3.6.1** | Wave 3 | Write property test verifying document parser states | 2026-07-04 | `test-engineer` | Created `backend/tests/unit/test_rag_pipeline.py` containing Hypothesis property-based tests verifying that empty or whitespace-only documents always throw `ValueError("EMPTY_DOCUMENT")` during index parsing. |
 | **3.5.3** | Wave 3 | Implement indexing failure rollbacks | 2026-07-02 | `backend-specialist` | Added exception handlers in `backend/app/rag/pipeline.py` that catch indexing failures, invoke `delete_file` to remove the uploaded file from Tigris/S3 storage, clean up partial local index persistent directories, and propagate the original exception. Added `test_index_document_failure_rollback` test verifying correct cleanup behavior. |
 | **3.5.2** | Wave 3 | Implement LlamaIndex vector store compilation | 2026-07-02 | `backend-specialist` | Updated `backend/app/rag/pipeline.py` to chunk documents with `SentenceSplitter` and serialize compiled indices to local directory `STORAGE_INDICES_DIR/{user_id}/{doc_id}`. Added `STORAGE_INDICES_DIR` to `Settings`. Updated `test_pipeline.py` to assert disk serialization and override behavior. |
 | **3.5.1** | Wave 3 | Integrate document loaders and text extraction | 2026-06-29 | `backend-specialist` | Created `backend/app/rag/pipeline.py` implementing `index_document` with LlamaIndex file loading, chunking, and index build. Rejects empty/whitespace documents with `ValueError("EMPTY_DOCUMENT")`. |
@@ -146,10 +147,11 @@ This file serves as a persistent context log for the Lexis RAG system implementa
     "3.4.1",
     "3.5.1",
     "3.5.2",
-    "3.5.3"
+    "3.5.3",
+    "3.6.1"
   ],
   "pending_immediate_tasks": [
-    "3.6.1"
+    "3.7.1"
   ]
 }
 ```
