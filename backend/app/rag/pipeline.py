@@ -3,7 +3,7 @@ import tempfile
 import shutil
 from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, Settings
 from llama_index.core.llms.mock import MockLLM
-from llama_index.core.embeddings.mock import MockEmbedding
+from llama_index.core.embeddings import MockEmbedding
 from llama_index.core.node_parser import SentenceSplitter
 from app.config import settings
 from app.storage.r2_client import delete_file
