@@ -18,7 +18,7 @@ def get_r2_client(
     Constructs and returns a boto3 S3 client configured for Tigris/S3.
     If credentials are not provided (or settings are empty), returns a mock client.
     """
-    if force_mock:
+    if force_mock or settings.FORCE_MOCK_S3:
         return MagicMock()
 
     acc_id = account_id or settings.ENDPOINT_URL_S3
@@ -35,13 +35,17 @@ def get_r2_client(
     else:
         endpoint_url = f"https://{acc_id}.r2.cloudflarestorage.com"
 
-    config = Config(signature_version="s3v4")
+    config = Config(
+        signature_version="s3v4",
+        s3={"addressing_style": "path"}
+    )
 
     return boto3.client(
         "s3",
         endpoint_url=endpoint_url,
         aws_access_key_id=key_id,
         aws_secret_access_key=sec_key,
+        region_name="us-east-1",
         config=config
     )
 
@@ -71,6 +75,18 @@ def upload_file(
         return key
 
     try:
+        # Check if bucket exists, create if missing
+        try:
+            client.head_bucket(Bucket=settings.S3_BUCKET_NAME)
+        except ClientError as head_err:
+            err_code = head_err.response.get("Error", {}).get("Code")
+            logger.warning(f"head_bucket '{settings.S3_BUCKET_NAME}' returned: {err_code} ({head_err}). Attempting bucket creation...")
+            try:
+                client.create_bucket(Bucket=settings.S3_BUCKET_NAME)
+                logger.info(f"Successfully created Tigris bucket '{settings.S3_BUCKET_NAME}'")
+            except Exception as create_err:
+                logger.warning(f"create_bucket '{settings.S3_BUCKET_NAME}' failed: {create_err}")
+
         client.put_object(
             Bucket=settings.S3_BUCKET_NAME,
             Key=key,
@@ -78,7 +94,7 @@ def upload_file(
             ContentType=content_type
         )
     except ClientError as e:
-        logger.error(f"Failed to upload file {key} to Tigris: {e}")
+        logger.error(f"Failed to upload file {key} to Tigris (Bucket: '{settings.S3_BUCKET_NAME}', Endpoint: '{settings.ENDPOINT_URL_S3}'): {e}")
         raise e
 
     return key

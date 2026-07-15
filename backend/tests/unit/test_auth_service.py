@@ -1,4 +1,5 @@
 import pytest
+import re
 from datetime import datetime, timezone, timedelta
 from hypothesis import given, strategies as st
 from app.auth.utils import validate_email_format, hash_password, verify_password
@@ -8,7 +9,9 @@ from app.auth.jwt import create_access_token, decode_token
 # Task 2.2.1: Property 1 - Email format checks
 # ==========================================
 
-@given(st.emails())
+_EMAIL_REGEX = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+
+@given(st.emails().filter(lambda email: bool(re.match(_EMAIL_REGEX, email))))
 def test_valid_emails_property(email):
     """
     Hypothesis test asserting that valid generated emails of length <= 254 

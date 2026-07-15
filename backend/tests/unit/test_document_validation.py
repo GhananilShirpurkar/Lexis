@@ -254,3 +254,17 @@ async def test_property_validate_file_size_empty_actual(actual_size):
     assert exc_info.value.detail["error"]["code"] == "EMPTY_FILE"
 
 
+from datetime import datetime, timedelta, timezone
+from app.documents.validation import calculate_expiry
+
+@given(uploaded_at=st.datetimes(timezones=st.just(timezone.utc) | st.none()))
+def test_property_calculate_expiry_is_seven_days_later(uploaded_at):
+    """
+    Hypothesis test asserting that the calculated expiry timestamp is exactly 7 days
+    after the uploaded_at timestamp.
+    """
+    expiry_at = calculate_expiry(uploaded_at)
+    assert expiry_at - uploaded_at == timedelta(days=7)
+
+
+

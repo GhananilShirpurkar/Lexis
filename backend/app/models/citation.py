@@ -26,4 +26,8 @@ class Citation(Base):
     
     # Relationships
     message: Mapped["Message"] = relationship("Message", back_populates="citations")
-    document: Mapped["Document"] = relationship("Document", back_populates="citations")
+    document: Mapped["Document"] = relationship("Document", back_populates="citations", lazy="selectin")
+
+    @property
+    def doc_filename(self) -> str:
+        return self.document.filename if self.document else ""

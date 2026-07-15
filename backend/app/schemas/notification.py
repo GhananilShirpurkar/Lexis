@@ -16,3 +16,7 @@ class NotificationResponse(NotificationBase):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+class NotificationUpdate(BaseModel):
+    status: str = Field(..., pattern="^(read|unread)$")
+

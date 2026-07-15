@@ -6,9 +6,9 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 ## 📊 Current High-Level State
 
-*   **Last Updated**: 2026-07-04
-*   **Current Wave**: Wave 3 (Document Upload, Validation & Storage)
-*   **Current Task**: 3.8.1: Write property test verifying summary limits (Property 13)
+*   **Last Updated**: 2026-07-14
+*   **Current Wave**: Wave 10 (Checkpoint — Full Backend Passes)
+*   **Current Task**: 10.1.1: Run all backend tests
 *   **Active Directory Layout**:
     *   Root contains: `pyproject.toml`, `main.py`, `README.md`
     *   `backend/` contains: `.python-version`, `pyproject.toml`, `alembic.ini`, `README.md`, `app/`, `migrations/`, `tests/`
@@ -33,6 +33,44 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 
 | Task ID | Wave | Description | Completed At | Agent | Key Code Modifications / Outputs |
 |---------|------|-------------|--------------|-------|----------------------------------|
+| **11.7.1** | Wave 11 | Implement premium research RAG workspace dashboard | 2026-07-14 | `frontend-specialist` | Created `frontend/src/pages/Dashboard.jsx` featuring active chat creation/deletion/renaming, drag-drop document upload, SSE-based live answer streaming, unread notification alerts, and context panels. |
+| **11.6.1** | Wave 11 | Wire React routing mapping and endpoints | 2026-07-14 | `frontend-specialist` | Integrated `react-router-dom` in `App.jsx` to route public `/auth`, protected `/`, and `/dev-console`. |
+| **11.5.1** | Wave 11 | Conform CSS layouts with design specification | 2026-07-14 | `frontend-specialist` | Refactored `index.css` incorporating the collapsible sidebar, notification dropdown, document upload zone, live message streaming cursors, and custom card shapes. |
+| **11.4.1** | Wave 11 | Implement ProtectedRoute routing wrapper | 2026-07-14 | `frontend-specialist` | Created `frontend/src/components/ProtectedRoute.jsx` verifying user session presence with skeleton loading transitions. |
+| **11.3.1** | Wave 11 | Create AuthPage authentication page | 2026-07-14 | `frontend-specialist` | Created `frontend/src/pages/AuthPage.jsx` with input validations, login/register tabs, and server-side warning alerts. |
+| **11.2.1** | Wave 11 | Create AuthContext authentication state provider | 2026-07-14 | `frontend-specialist` | Created `frontend/src/context/AuthContext.jsx` handling user authentication status, session local persistence, and global sign-out triggers. |
+| **11.1.1** | Wave 11 | Setup apiClient Axios client infrastructure | 2026-07-14 | `frontend-specialist` | Created `frontend/src/api/client.js` with auto-injecting JWT headers and 401 unauth interceptors. |
+| **9.3.1** | Wave 9 | Create notification fetch and modification API endpoints | 2026-07-14 | `backend-specialist` | Added `GET /notifications` and `PATCH /notifications/{notif_id}` in `backend/app/routers/notifications.py`, registered router in `main.py`, wrote unit tests in `test_notifications.py`. |
+| **9.2.1** | Wave 9 | Write property tests for expiry service behavior | 2026-07-14 | `test-engineer` | Added unit and property tests verifying warning notice triggers under 48h and re-upload reset logic in `test_expiry.py`. |
+| **9.1.4** | Wave 9 | Register scheduler background tasks | 2026-07-14 | `devops-engineer` | Integrated APScheduler in `main.py` to trigger the background expiry scan job at 12-hour intervals on server startup. |
+| **9.1.3** | Wave 9 | Build expiry warning notice generator | 2026-07-14 | `devops-engineer` | Added `check_expiry_warnings` scanning for documents expiring in under 48h and spawning unread in-app alerts in `expiry/service.py`. |
+| **9.1.2** | Wave 9 | Implement file and index deletion routines | 2026-07-14 | `devops-engineer` | Added file and vector index physical deletion routines on document expiration in `expiry/service.py`. |
+| **9.1.1** | Wave 9 | Build expired document db queries | 2026-07-14 | `devops-engineer` | Implemented `check_document_expirations` scanning database for expired documents in `expiry/service.py`. |
+| **8.2.1** | Wave 8 | Write property tests verifying multi-tenant isolation | 2026-07-14 | `test-engineer` | Added Hypothesis tests checking `assert_owns` validation with mismatched user IDs in `test_authorization.py`. |
+| **8.1.1** | Wave 8 | Build centralized ownership validation handler | 2026-07-14 | `security-auditor` | Implemented `assert_owns(user_id, resource, db)` in `backend/app/auth/ownership.py` returning HTTP 403 on tenant violations and HTTP 404 on missing records. |
+| **7.4.1** | Wave 7 | Wire Unified_Chat message endpoint to unified query | 2026-07-14 | `backend-specialist` | Routed SSE message submission endpoint to `query_unified` cross-document RAG pipeline if the chat is unified. |
+| **7.3.1** | Wave 7 | Write property test verifying project limits (Property 19) | 2026-07-14 | `test-engineer` | Added test verifying project creation is blocked when user hits 10 projects. |
+| **7.2.1** | Wave 7 | Write property tests verifying project boundaries (Property 18) | 2026-07-14 | `test-engineer` | Added property tests verifying maximum of 4 chats and 4 unique docs constraint. |
+| **7.1.4** | Wave 7 | Create Project chat membership management APIs | 2026-07-14 | `backend-specialist` | Added project chat add/remove endpoints with capacity validations. |
+| **7.1.3** | Wave 7 | Create Project rename and delete API endpoints | 2026-07-14 | `backend-specialist` | Added rename and cascading deletion logic. |
+| **7.1.2** | Wave 7 | Create Project list and details API endpoints | 2026-07-14 | `backend-specialist` | Added listing and details fetching endpoints. |
+| **7.1.1** | Wave 7 | Create Project creation API endpoint | 2026-07-14 | `backend-specialist` | Created `POST /projects` endpoint creating project and Unified Chat record. |
+| **6.1-6.10**| Wave 6 | Cross-document context retrieval & SSE streaming | 2026-07-14 | `backend-specialist` | Implemented cross-document context retriever, LLM prompt builder, providers module, connection retry decorator, SSE formatting pipeline, done event with citation deduplication, and atomic DB logger in `backend/app/rag/pipeline.py`. Wrote unit tests in `test_unified_query.py` and `test_citations.py`. |
+| **5.5.1** | Wave 5 | Create message history retrieval API endpoint | 2026-07-14 | `backend-specialist` | Added `GET /chats/{chat_id}/messages` to `backend/app/routers/chats.py` with ownership validation and selectinload message citations. Wrote unit tests in `test_chat_management.py`. |
+| **5.4.1** | Wave 5 | Write property test verifying resources limits (Property 19) | 2026-07-14 | `test-engineer` | Added Hypothesis test asserting 40 active chats limit. |
+| **5.3.1** | Wave 5 | Write property test verifying fallback provider (Property 14) | 2026-07-14 | `test-engineer` | Added Hypothesis test asserting provider fallback to gemini or last_provider. |
+| **5.2.1** | Wave 5 | Write property tests validating display naming ranges (Properties 8, 9, 23) | 2026-07-14 | `test-engineer` | Added Hypothesis tests checking display name lengths, truncation, and original_name preservation. |
+| **5.1.4** | Wave 5 | Create Chat deletion API endpoint | 2026-07-14 | `backend-specialist` | Added `DELETE /chats/{chat_id}` with cascade deletes and conditional hard-deletion of orphaned documents from storage and local index. |
+| **5.1.3** | Wave 5 | Create Chat rename API endpoint | 2026-07-14 | `backend-specialist` | Added `PATCH /chats/{chat_id}` with 1-60 characters limits and original_name preservation logic. |
+| **5.1.2** | Wave 5 | Create Chat retrieval list APIs | 2026-07-14 | `backend-specialist` | Added `GET /chats` and `GET /chats/{chat_id}` with ownership validation. |
+| **5.1.1** | Wave 5 | Create Chat creation API endpoint | 2026-07-14 | `backend-specialist` | Added `POST /chats enforcing the 40 active chats limit per user. |
+| **4.1.1** | Wave 4 | Run and pass all unit tests | 2026-07-14 | `test-engineer` | Executed full unit test suite; resolved pytest DB startup crash and aligned email validation regex tests. |
+| **3.11.2** | Wave 3 | Create document deletion API endpoint | 2026-07-14 | `backend-specialist` | Added `DELETE /documents/{doc_id}` to `backend/app/routers/documents.py` verifying ownership and returning `404 Not Found` to prevent information leaks. The route hard-deletes the document, triggers cascade deletes, cleans up S3 storage, and removes local RAG vector indices. Wrote unit tests in `test_documents_router.py`. |
+| **3.11.1** | Wave 3 | Create document retrieval API endpoint | 2026-07-14 | `backend-specialist` | Added `GET /documents/{doc_id}` to `backend/app/routers/documents.py` validating ownership and returning `404 Not Found` for invalid access/non-existent documents. Wrote unit tests in `test_documents_router.py`. |
+| **3.10.1** | Wave 3 | Write property test checking date expirations (Property 6) | 2026-07-14 | `test-engineer` | Added a Hypothesis property test `test_property_calculate_expiry_is_seven_days_later` inside `backend/tests/unit/test_document_validation.py` asserting date expiry logic under timezone-aware (UTC) and naive configurations. Integrated custom `calculate_expiry` function into `routers/documents.py`. |
+| **3.9.2** | Wave 3 | Implement atomic database upload transactions | 2026-07-14 | `backend-specialist` | Implemented database transactions combining upload records insertion and updating associated `chat.current_doc_id` inside the upload endpoint. Handled chat title auto-derivation matching Requirement 8.3 and robust S3 and local vector index cleanup on transaction failures. |
+| **3.9.1** | Wave 3 | Build file upload router mappings | 2026-07-14 | `backend-specialist` | Created `backend/app/routers/documents.py` defining the protected `POST /documents/upload` route, supporting multipart file payload and optional chat_id, and executing validation, R2 upload, and vector indexing. Registered router in `main.py` and wrote unit tests in `test_documents_router.py`. |
+| **3.8.1** | Wave 3 | Write property test verifying summary limits (Property 13) | 2026-07-05 | `test-engineer` | Added 3 Hypothesis property tests to `backend/tests/unit/test_rag_pipeline.py`: (A) mocked Gemini returns a string ≤5000 chars and ≤150 words, (B) both providers failing yields `""`, (C) no API keys yields `""`. Fixed `MockEmbedding` import path in `pipeline.py` (`llama_index.core.embeddings`). Added `deadline=None, suppress_health_check` to Property 22 to prevent timeout on slow LlamaIndex I/O. All 4 tests pass in 15s. |
 | **3.7.2** | Wave 3 | Write generation error fallback logic | 2026-07-04 | `backend-specialist` | Implemented try-except error handling inside `generate_summary` that cascades from Gemini to Groq, and gracefully defaults to an empty string on ultimate failure. Truncated inputs to 10,000 characters. |
 | **3.7.1** | Wave 3 | Write summary generation LLM provider prompts | 2026-07-04 | `backend-specialist` | Implemented `generate_summary` function in `backend/app/rag/pipeline.py` with custom text-only prompt requesting cohesive paragraphs (<=150 words, <=5000 chars) describing the document's content. |
 | **3.6.1** | Wave 3 | Write property test verifying document parser states | 2026-07-04 | `test-engineer` | Created `backend/tests/unit/test_rag_pipeline.py` containing Hypothesis property-based tests verifying that empty or whitespace-only documents always throw `ValueError("EMPTY_DOCUMENT")` during index parsing. |
@@ -72,7 +110,7 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 | **1.5.5** | Wave 1 | Implement Project and ProjectChat SQLAlchemy models | 2026-06-23 | `database-architect` | Created `backend/app/models/project.py` mapping workspace tables, junction join constraints, and cascading rules. |
 | **1.5.4** | Wave 1 | Implement Citation SQLAlchemy model | 2026-06-23 | `database-architect` | Created `backend/app/models/citation.py` with excerpt and page number definitions, and cascade deleted references. |
 | **1.5.3** | Wave 1 | Implement Chat and Message SQLAlchemy models | 2026-06-23 | `database-architect` | Created `backend/app/models/chat.py` and `backend/app/models/message.py` with cross-referenced relationships and foreign keys. |
-| **1.5.2** | Wave 1 | Implement Document SQLAlchemy model | 2026-06-23 | `database-architect` | Created `backend/app/models/document.py` mapping Document fields, foreign keys, and indexes (including compound index on expiry/status). |
+| **1.5.2** | Wave 1 | Implement Document SQLAlchemy model | 2026-06-23 | `database-architect` | Created base model class `backend/app/db/base.py` and `backend/app/models/document.py` mapping Document fields, foreign keys, and indexes (including compound index on expiry/status). |
 | **1.5.1** | Wave 1 | Implement User SQLAlchemy model | 2026-06-23 | `database-architect` | Created base model class `backend/app/db/base.py` and `backend/app/models/user.py` mapping email, hashed password, and relationships. |
 | **1.4.3** | Wave 1 | Create FastAPI database dependency provider | 2026-06-23 | `database-architect` | Created database dependency `get_db()` inside `backend/app/db/session.py` with automatic exception rollback. |
 | **1.4.2** | Wave 1 | Implement SQLAlchemy session lifecycle factory | 2026-06-23 | `database-architect` | Added `AsyncSessionLocal` sessionmaker configuration to `backend/app/db/session.py`. |
@@ -84,8 +122,6 @@ This file serves as a persistent context log for the Lexis RAG system implementa
 | **1.2.1** | Wave 1 | Scaffold React application with Vite | 2026-06-23 | `project-planner` | Scaffolded `frontend/` containing `package.json`, `vite.config.js`, `index.html`, `.gitignore`, and `src/` with a high-fidelity carbon theme and typography configuration. |
 | **1.1.2** | Wave 1 | Configure Python project configuration and package dependencies | 2026-06-23 | `project-planner` | Created `backend/pyproject.toml` containing FastAPI, SQLAlchemy, LlamaIndex, etc., and `backend/README.md`. |
 | **1.1.1** | Wave 1 | Create backend root directory and configuration stubs | 2026-06-23 | `project-planner` | Created `backend/` folder, `.python-version` (3.11), and empty `backend/app/__init__.py`. |
-| **N/A** | N/A  | Compiled `task_agent_mapping.md` | 2026-06-22 | `project-planner` | Master task breakdown mapping completed. |
-| **N/A** | N/A  | Created `context.md` | 2026-06-22 | `project-planner` | Initial context logging file created. |
 
 ---
 
@@ -152,10 +188,54 @@ This file serves as a persistent context log for the Lexis RAG system implementa
     "3.5.3",
     "3.6.1",
     "3.7.1",
-    "3.7.2"
+    "3.7.2",
+    "3.8.1",
+    "3.9.1",
+    "3.9.2",
+    "3.10.1",
+    "3.11.1",
+    "3.11.2",
+    "4.1.1",
+    "5.1.1",
+    "5.1.2",
+    "5.1.3",
+    "5.1.4",
+    "5.2.1",
+    "5.3.1",
+    "5.4.1",
+    "5.5.1",
+    "6.1.1",
+    "6.1.2",
+    "6.1.3",
+    "6.2.1",
+    "6.3.1",
+    "6.4.1",
+    "6.5.1",
+    "6.5.2",
+    "6.6.1",
+    "6.7.1",
+    "6.8.1",
+    "6.9.1",
+    "6.10.1",
+    "6.10.2",
+    "7.1.1",
+    "7.1.2",
+    "7.1.3",
+    "7.1.4",
+    "7.2.1",
+    "7.3.1",
+    "7.4.1",
+    "8.1.1",
+    "8.2.1",
+    "9.1.1",
+    "9.1.2",
+    "9.1.3",
+    "9.1.4",
+    "9.2.1",
+    "9.3.1"
   ],
   "pending_immediate_tasks": [
-    "3.8.1"
+    "10.1.1"
   ]
 }
 ```

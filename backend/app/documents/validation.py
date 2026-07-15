@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timedelta
 from fastapi import HTTPException, status, UploadFile
 
 ALLOWED_EXTENSIONS = {
@@ -117,3 +118,7 @@ async def validate_file_size(file: UploadFile, content_length: int | None = None
             }
         )
 
+
+def calculate_expiry(uploaded_at: datetime) -> datetime:
+    """Calculate the expiry date, which is exactly 7 days after the uploaded_at timestamp."""
+    return uploaded_at + timedelta(days=7)

@@ -122,3 +122,118 @@ def test_property_summary_empty_string_when_no_api_keys(input_text, filename):
     assert result == "", (
         f"Expected empty string with no API keys configured, got: {result!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Property 12: chunk retrieval count limits
+# ---------------------------------------------------------------------------
+
+@given(
+    num_chunks=st.integers(min_value=0, max_value=10)
+)
+@h_settings(max_examples=50)
+def test_property_retrieval_chunk_limit(num_chunks):
+    """
+    Property 12: Mock retriever returning `num_chunks` chunks.
+    Verify that:
+    1. If zero chunks: triggers `NO_CONTENT_RETRIEVED` without calling LLM.
+    2. If > 0 chunks: pipeline passes at most 5 chunks to build_prompt and the LLM.
+    """
+    import asyncio
+    import json
+    import uuid
+    from llama_index.core.schema import NodeWithScore, TextNode
+    from app.rag.pipeline import query
+    from app.models.chat import Chat
+
+    # Setup mock nodes
+    mock_nodes = [
+        NodeWithScore(
+            node=TextNode(text=f"Chunk content {i}", metadata={"file_name": "doc.pdf"}),
+            score=0.8
+        )
+        for i in range(num_chunks)
+    ]
+
+    # Mock DB, Chat, retrieve_context, and stream_gemini
+    mock_db = MagicMock()
+    # Mock AsyncSession's execute
+    mock_execute_result = MagicMock()
+    mock_chat = Chat(
+        id=uuid.uuid4(),
+        user_id=123,
+        current_doc_id=uuid.uuid4(),
+        last_provider="gemini"
+    )
+    mock_execute_result.scalars().first.return_value = mock_chat
+    
+    # We need an async execute
+    async def async_execute(*args, **kwargs):
+        return mock_execute_result
+    mock_db.execute = async_execute
+
+    # Keep track of build_prompt arguments
+    prompt_nodes_passed = []
+    def spy_build_prompt(query_text, nodes):
+        prompt_nodes_passed.extend(nodes)
+        return "mock prompt"
+
+    async def mock_stream(prompt):
+        yield "response token"
+
+    # Mock retrieve_context to mimic actual retrieval where similarity_top_k=5
+    # So the retriever will return at most 5 nodes.
+    retrieved_nodes = mock_nodes[:5]
+
+    if num_chunks == 0:
+        # Zero chunks triggers ValueError("NO_CONTENT_RETRIEVED")
+        def mock_retrieve_context_empty(user_id, doc_id, query_str, top_k=5):
+            raise ValueError("NO_CONTENT_RETRIEVED")
+        
+        with patch("app.rag.pipeline.retrieve_context", side_effect=mock_retrieve_context_empty), \
+             patch("app.rag.providers.stream_gemini", side_effect=mock_stream) as mock_llm_call:
+            
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            async def run_query():
+                events = []
+                async for event in query(chat_id=mock_chat.id, user_message="hello", provider="gemini", db=mock_db):
+                    events.append(event)
+                return events
+
+            events = loop.run_until_complete(run_query())
+            loop.close()
+
+            assert len(events) == 1
+            data = json.loads(events[0].replace("data: ", "").strip())
+            assert data["type"] == "error"
+            assert data["code"] == "NO_CONTENT_RETRIEVED"
+            mock_llm_call.assert_not_called()
+    else:
+        # > 0 chunks
+        def mock_retrieve_context_nodes(user_id, doc_id, query_str, top_k=5):
+            return retrieved_nodes
+
+        with patch("app.rag.pipeline.retrieve_context", side_effect=mock_retrieve_context_nodes), \
+             patch("app.rag.pipeline.build_prompt", side_effect=spy_build_prompt), \
+             patch("app.rag.providers.stream_gemini", side_effect=mock_stream) as mock_llm_call:
+            
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            async def run_query():
+                events = []
+                async for event in query(chat_id=mock_chat.id, user_message="hello", provider="gemini", db=mock_db):
+                    events.append(event)
+                return events
+
+            events = loop.run_until_complete(run_query())
+            loop.close()
+
+            assert len(events) > 0
+            # Ensure at most 5 nodes were passed to build_prompt
+            assert len(prompt_nodes_passed) <= 5
+            assert len(prompt_nodes_passed) == min(num_chunks, 5)
+            mock_llm_call.assert_called_once()
+

@@ -15,4 +15,6 @@ pydantic-settings
 python-multipart
 alembic
 email-validator
+pypdf
+llama-index-readers-file
 

@@ -58,6 +58,8 @@ def upgrade() -> None:
         sa.Column('title', sa.String(length=60), nullable=False),
         sa.Column('last_provider', sa.String(length=50), nullable=True),
         sa.Column('current_doc_id', sa.UUID(), nullable=True),
+        sa.Column('is_unified', sa.Boolean(), server_default='false', nullable=False),
+        sa.Column('project_id', sa.UUID(), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.ForeignKeyConstraint(['current_doc_id'], ['documents.id'], ondelete='SET NULL'),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
@@ -70,13 +72,20 @@ def upgrade() -> None:
         'messages',
         sa.Column('id', sa.UUID(), nullable=False),
         sa.Column('chat_id', sa.UUID(), nullable=False),
+        sa.Column('user_id', sa.UUID(), nullable=False),
         sa.Column('role', sa.String(length=50), nullable=False),
         sa.Column('content', sa.Text(), nullable=False),
+        sa.Column('provider', sa.String(length=50), nullable=True),
+        sa.Column('doc_id', sa.UUID(), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.ForeignKeyConstraint(['chat_id'], ['chats.id'], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(['doc_id'], ['documents.id'], ondelete='SET NULL'),
         sa.PrimaryKeyConstraint('id')
     )
     op.create_index('ix_messages_chat_id', 'messages', ['chat_id'], unique=False)
+    op.create_index('ix_messages_user_id', 'messages', ['user_id'], unique=False)
+    op.create_index('ix_messages_doc_id', 'messages', ['doc_id'], unique=False)
 
     # 5. citations table
     op.create_table(
@@ -105,6 +114,16 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('id')
     )
     op.create_index('ix_projects_user_id', 'projects', ['user_id'], unique=False)
+
+    op.create_foreign_key(
+        'fk_chats_project_id_projects',
+        'chats',
+        'projects',
+        ['project_id'],
+        ['id'],
+        ondelete='CASCADE'
+    )
+    op.create_index('ix_chats_project_id', 'chats', ['project_id'], unique=False)
 
     # 7. project_chats table
     op.create_table(

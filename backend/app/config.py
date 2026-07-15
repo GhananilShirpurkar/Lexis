@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     ENDPOINT_URL_S3: str = "https://fly.storage.tigris.dev"
     TIGRIS_ACCESS_KEY_ID: str = ""
     TIGRIS_SECRET_KEY: str = ""
+    FORCE_MOCK_S3: bool = False
+    FORCE_MOCK_LLM: bool = False
     
     # LLM API configuration options
     GEMINI_API_KEY: str = ""

@@ -19,5 +19,11 @@ wheels/
 #Sectets
 .env
 
+#Storage / Indices
+backend/storage/indices/
+storage/indices/
+
 #Frontend
 node_modules/
+
+

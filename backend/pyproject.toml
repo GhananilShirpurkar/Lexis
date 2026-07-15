@@ -18,14 +18,20 @@ dependencies = [
     "boto3",
     "llama-index",
     "google-generativeai",
+    "google-genai",
     "groq",
     "apscheduler",
     "pydantic",
     "pydantic-settings",
     "python-multipart",
     "alembic",
-    "email-validator"
+    "email-validator",
+    "pypdf",
+    "llama-index-readers-file",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
 
 [project.optional-dependencies]
 dev = [
