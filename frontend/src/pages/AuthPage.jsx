@@ -11,7 +11,8 @@ const AuthPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  
+  const [showPassword, setShowPassword] = useState(false);
+
   // Validation states
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
@@ -96,7 +97,6 @@ const AuthPage = () => {
       } else {
         await register(email, password);
       }
-      // Successful auth triggers redirect via the useEffect hook observing user state
     } catch (err) {
       console.error(err);
       const detail = err.response?.data?.detail;
@@ -109,7 +109,6 @@ const AuthPage = () => {
     }
   };
 
-  // Check if form has errors or is empty
   const isFormInvalid = 
     !email || 
     !password || 
@@ -119,100 +118,181 @@ const AuthPage = () => {
     isSubmitting;
 
   return (
-    <div className="auth-page-container">
-      <div className="auth-card">
-        <div className="auth-header">
-          <span className="auth-logo-icon">📚</span>
-          <h1 className="auth-logo-text">Lexis</h1>
-          <p className="auth-subtitle">
-            {isLogin ? 'Welcome back. Sign in to your workspace.' : 'Create an account to get started.'}
-          </p>
+    <div className="auth-page">
+      {/* LEFT PANE — Brand / Visual (50%) */}
+      <div className="auth-brand-pane">
+        {/* Chamfered background plate behind wordmark */}
+        <div className="brand-bg-plate" />
+
+        {/* Floating Accent Amber Squares */}
+        <div className="brand-floating-square" style={{ top: '15%', left: '12%' }} />
+        <div className="brand-floating-square" style={{ top: '22%', right: '15%' }} />
+        <div className="brand-floating-square" style={{ bottom: '20%', left: '16%' }} />
+        <div className="brand-floating-square" style={{ bottom: '28%', right: '12%' }} />
+
+        {/* Centered Brand Content */}
+        <div className="brand-content">
+          <h1 className="brand-wordmark">LEXIS</h1>
+          <p className="brand-tagline">Retrieval-Augmented Generation Workspace</p>
+
+          <div className="brand-bullets">
+            <div className="bullet-item">
+              <span className="bullet-dot" />
+              <span>Upload documents and index instantly</span>
+            </div>
+            <div className="bullet-item">
+              <span className="bullet-dot" />
+              <span>Query with Gemini 1.5 Flash or Groq Llama 3</span>
+            </div>
+            <div className="bullet-item">
+              <span className="bullet-dot" />
+              <span>Cited sources with every response</span>
+            </div>
+          </div>
         </div>
 
-        {serverError && (
-          <div className="auth-error-banner" role="alert">
-            <span className="error-icon">⚠️</span>
-            <span className="error-text">{serverError}</span>
-          </div>
-        )}
+        {/* Mascot Robot Character & Speech Bubble */}
+        <div className="brand-mascot-container">
+          <div className="mascot-bubble">"Welcome to Lexis! Your documents are waiting."</div>
+          <div style={{ fontSize: '48px', lineHeight: 1 }}>🤖</div>
+        </div>
+      </div>
 
-        <form onSubmit={handleSubmit} className="auth-form" noValidate>
-          <div className="input-group">
-            <label htmlFor="email">Email Address</label>
-            <input
-              type="email"
-              id="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={emailError ? 'input-error' : ''}
-              required
-            />
-            {emailError && <span className="field-error">{emailError}</span>}
-          </div>
-
-          <div className="input-group">
-            <label htmlFor="password">Password</label>
-            <input
-              type="password"
-              id="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className={passwordError ? 'input-error' : ''}
-              required
-            />
-            {passwordError && <span className="field-error">{passwordError}</span>}
+      {/* RIGHT PANE — Form Panel (50%) */}
+      <div className="auth-form-pane">
+        <div className="auth-form-container">
+          {/* Header Inside Form */}
+          <div className="auth-form-header">
+            <div className="logo-pill" style={{ display: 'inline-flex', border: '2px solid var(--color-primary)', margin: '0 auto 12px auto' }}>
+              <span style={{ fontSize: '12px' }}>📚</span>
+              <span className="logo-wordmark" style={{ fontSize: '11px' }}>LEXIS</span>
+            </div>
+            <h2 className="auth-form-title">{isLogin ? 'Sign In' : 'Register'}</h2>
+            <p className="auth-form-subtitle">
+              {isLogin ? 'Authenticate to access your workspace' : 'Create new workspace access account'}
+            </p>
           </div>
 
-          {!isLogin && (
-            <div className="input-group">
-              <label htmlFor="confirmPassword">Confirm Password</label>
-              <input
-                type="password"
-                id="confirmPassword"
-                placeholder="••••••••"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className={confirmPasswordError ? 'input-error' : ''}
-                required
-              />
-              {confirmPasswordError && <span className="field-error">{confirmPasswordError}</span>}
+          {/* Modern Toast Error Banner */}
+          {serverError && (
+            <div className="auth-error-banner" role="alert">
+              <span className="auth-error-icon">⚠️</span>
+              <span className="auth-error-text">{serverError}</span>
             </div>
           )}
 
-          <button
-            type="submit"
-            className="btn btn-primary btn-block"
-            disabled={isFormInvalid}
-          >
-            {isSubmitting ? (
-              <span className="spinner">Processing...</span>
-            ) : isLogin ? (
-              'Sign In'
-            ) : (
-              'Create Account'
-            )}
-          </button>
-        </form>
+          {/* Form Controls */}
+          <form onSubmit={handleSubmit} noValidate>
+            <div className="auth-input-group">
+              <label htmlFor="email" className="auth-field-label">EMAIL ADDRESS</label>
+              <input
+                type="email"
+                id="email"
+                placeholder="operator@lexis.internal"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className={`auth-text-input ${emailError ? 'input-error' : ''}`}
+                required
+              />
+              {emailError && (
+                <span style={{ color: '#e60012', fontSize: '12px', fontWeight: '700', marginTop: '4px', display: 'block' }}>
+                  {emailError}
+                </span>
+              )}
+            </div>
 
-        <div className="auth-toggle">
-          <span>
-            {isLogin ? "Don't have an account?" : 'Already have an account?'}
-          </span>
-          <button
-            type="button"
-            className="btn-link"
-            onClick={() => {
-              setIsLogin(!isLogin);
-              setServerError('');
-              setEmailError('');
-              setPasswordError('');
-              setConfirmPasswordError('');
-            }}
-          >
-            {isLogin ? 'Sign up free' : 'Sign in'}
-          </button>
+            <div className="auth-input-group">
+              <label htmlFor="password" className="auth-field-label">PASSWORD</label>
+              <div className="auth-password-wrapper">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  id="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className={`auth-text-input ${passwordError ? 'input-error' : ''}`}
+                  required
+                />
+                <button
+                  type="button"
+                  className="auth-password-toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? 'HIDE' : 'SHOW'}
+                </button>
+              </div>
+              {passwordError && (
+                <span style={{ color: '#e60012', fontSize: '12px', fontWeight: '700', marginTop: '4px', display: 'block' }}>
+                  {passwordError}
+                </span>
+              )}
+            </div>
+
+            {!isLogin && (
+              <div className="auth-input-group">
+                <label htmlFor="confirmPassword" className="auth-field-label">CONFIRM PASSWORD</label>
+                <input
+                  type="password"
+                  id="confirmPassword"
+                  placeholder="••••••••"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className={`auth-text-input ${confirmPasswordError ? 'input-error' : ''}`}
+                  required
+                />
+                {confirmPasswordError && (
+                  <span style={{ color: '#e60012', fontSize: '12px', fontWeight: '700', marginTop: '4px', display: 'block' }}>
+                    {confirmPasswordError}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              className="auth-button-submit"
+              disabled={isFormInvalid}
+            >
+              {isSubmitting ? (
+                <>
+                  <div className="spinner" />
+                  <span>AUTHENTICATING...</span>
+                </>
+              ) : isLogin ? (
+                'SIGN IN ➔'
+              ) : (
+                'CREATE ACCOUNT ➔'
+              )}
+            </button>
+          </form>
+
+          {/* Toggle Section */}
+          <div className="auth-toggle">
+            <span className="auth-toggle-text">
+              {isLogin ? "Need account?" : 'Already registered?'}
+            </span>
+            <button
+              type="button"
+              className="auth-toggle-link"
+              onClick={() => {
+                setIsLogin(!isLogin);
+                setServerError('');
+                setEmailError('');
+                setPasswordError('');
+                setConfirmPasswordError('');
+              }}
+            >
+              {isLogin ? 'SIGN UP FREE' : 'SIGN IN'}
+            </button>
+          </div>
+
+          {/* Trust Bar */}
+          <div className="auth-trust-bar">
+            <span className="trust-badge">SOC 2 TYPE II</span>
+            <span className="trust-badge">END-TO-END ENCRYPTED</span>
+            <span className="trust-badge">AES-256</span>
+          </div>
         </div>
       </div>
     </div>

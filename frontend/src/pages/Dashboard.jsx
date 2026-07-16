@@ -297,148 +297,195 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="workspace-layout">
-      {/* 1. Sidebar */}
-      <aside className={`sidebar ${sidebarOpen ? '' : 'collapsed'}`}>
-        <div className="sidebar-logo">
-          <span>📚</span>
-          <span>Lexis</span>
-          <button className="sidebar-toggle-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>
-            ◀
-          </button>
+    <div className="app-shell">
+      {/* 1. Carbon Top Nav Bar */}
+      <header className="nav-bar">
+        <div className="nav-logo-area">
+          <Link to="/" className="logo-pill">
+            <span style={{ fontSize: '14px' }}>📚</span>
+            <span className="logo-wordmark">LEXIS</span>
+          </Link>
+
+          <nav className="nav-links">
+            <Link to="/" className="nav-item active">Query</Link>
+            <a href="#library" className="nav-item" onClick={(e) => { e.preventDefault(); alert("Library view active"); }}>Library</a>
+            <Link to="/dev-console" className="nav-item">Console</Link>
+            <a href="#settings" className="nav-item" onClick={(e) => { e.preventDefault(); alert("Settings active"); }}>Settings</a>
+          </nav>
         </div>
 
-        <button className="btn btn-primary btn-block" onClick={handleCreateChat}>
-          <span>+</span> New Chat
-        </button>
+        <div className="nav-utility-area">
+          {/* Notifications Alert Bell */}
+          <div className="notification-bell-container" style={{ position: 'relative' }}>
+            <button 
+              className="nav-badge nav-badge-alerts" 
+              onClick={() => setShowNotifications(!showNotifications)}
+              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              🔔 ALERTS 
+              {notifications.length > 0 && (
+                <span className="badge badge-error" style={{ borderRadius: '9999px', padding: '1px 5px' }}>
+                  {notifications.length}
+                </span>
+              )}
+            </button>
 
-        {/* Notifications Alert Bell */}
-        <div className="notification-bell-container">
-          <button 
-            className="btn btn-secondary btn-block notification-bell-btn" 
-            onClick={() => setShowNotifications(!showNotifications)}
-          >
-            🔔 Notifications 
-            {notifications.length > 0 && <span className="notification-badge-alert">{notifications.length}</span>}
-          </button>
-
-          {showNotifications && (
-            <div className="notifications-dropdown">
-              <div className="notifications-dropdown-header">
-                <span>Impending Document Expirations</span>
-                <button onClick={() => setShowNotifications(false)}>✕</button>
-              </div>
-              <div className="notifications-dropdown-list">
+            {showNotifications && (
+              <div className="notifications-dropdown" style={{
+                position: 'absolute', right: 0, top: '40px', width: '280px',
+                backgroundColor: '#ffffff', border: '1px solid #3d4f97',
+                boxShadow: '0 4px 16px rgba(33,36,46,0.2)', padding: '16px', zIndex: 100, borderRadius: '4px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #5a5f8c', paddingBottom: '8px', marginBottom: '8px', fontWeight: '700', fontSize: '12px' }}>
+                  <span>WORKSPACE ALERTS</span>
+                  <button className="btn-ghost" onClick={() => setShowNotifications(false)}>✕</button>
+                </div>
                 {notifications.length === 0 ? (
-                  <p className="no-notifications-text">No active alerts.</p>
+                  <p style={{ fontSize: '12px', color: '#60619c' }}>No active document expirations.</p>
                 ) : (
                   notifications.map(n => (
-                    <div key={n.id} className="notification-item-card">
-                      <p className="notification-item-message">{n.message}</p>
-                      <button 
-                        className="notification-dismiss-btn"
-                        onClick={(e) => handleDismissNotification(n.id, e)}
-                      >
+                    <div key={n.id} style={{ padding: '8px 0', borderBottom: '1px dotted #5a5f8c' }}>
+                      <p style={{ fontSize: '12px', marginBottom: '4px' }}>{n.message}</p>
+                      <button className="btn btn-ghost" style={{ fontSize: '11px', color: '#e60012' }} onClick={(e) => handleDismissNotification(n.id, e)}>
                         Dismiss
                       </button>
                     </div>
                   ))
                 )}
               </div>
-            </div>
-          )}
-        </div>
-
-        <nav className="sidebar-menu">
-          <span className="sidebar-menu-title">Chat Session History</span>
-          <div className="sidebar-scroll">
-            {chats.map(chat => (
-              <div 
-                key={chat.id} 
-                className={`sidebar-item ${activeChat?.id === chat.id ? 'active' : ''}`}
-                onClick={() => selectChat(chat)}
-              >
-                <span className="sidebar-item-icon">💬</span>
-                <span className="sidebar-item-text">{chat.display_name || chat.title}</span>
-                <button 
-                  className="sidebar-delete-chat-btn" 
-                  onClick={(e) => handleDeleteChat(chat.id, e)}
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-          </div>
-        </nav>
-
-        <div className="sidebar-footer">
-          <div className="sidebar-user">
-            <div className="user-avatar">
-              {user?.email ? user.email[0].toUpperCase() : 'U'}
-            </div>
-            <div className="user-info">
-              <span className="user-email">{user?.email || 'Loading...'}</span>
-              <span className="user-role">Workspace User</span>
-            </div>
-          </div>
-          <Link to="/dev-console" className="btn btn-secondary btn-block dev-console-link-btn">
-            ⚙️ Developer Console
-          </Link>
-          <button className="btn btn-secondary danger btn-block" onClick={logout}>
-            Log Out
-          </button>
-        </div>
-      </aside>
-
-      {/* 2. Main Chat Area */}
-      <main className="chat-area">
-        <header className="chat-header">
-          <div className="chat-title-section">
-            {isRenaming ? (
-              <form onSubmit={handleRenameChat} className="chat-rename-form">
-                <input 
-                  type="text" 
-                  value={renameValue} 
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  maxLength={60}
-                  autoFocus
-                />
-                <button type="submit">Save</button>
-                <button type="button" onClick={() => setIsRenaming(false)}>Cancel</button>
-              </form>
-            ) : (
-              <h2 className="chat-title-text" onClick={() => activeChat && setIsRenaming(true)}>
-                {activeChat ? (activeChat.display_name || activeChat.title) : 'No Active Chat'}
-                {activeChat && <span className="edit-icon-helper"> ✏️</span>}
-              </h2>
             )}
           </div>
 
-          <div className="provider-selector" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <button 
-              className="btn btn-secondary" 
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-              style={{ fontSize: '0.85rem', padding: '6px 12px' }}
-            >
-              {isUploading ? 'Uploading...' : '📎 Upload Doc'}
+          <span className="nav-badge nav-badge-model">
+            {provider === 'gemini' ? 'Gemini 1.5 Flash' : 'Groq Llama 3'}
+          </span>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div className="nav-avatar">
+              {user?.email ? user.email[0].toUpperCase() : 'U'}
+            </div>
+            <button className="btn btn-ghost" onClick={logout} style={{ fontSize: '11px' }} title="Log Out">
+              EXIT
             </button>
-            <div>
-              <label htmlFor="llm-provider">Model: </label>
+          </div>
+        </div>
+      </header>
+
+      {/* 2. Secondary Subnav Strip */}
+      <div className="subnav-strip">
+        <div className="subnav-links" style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+          <span className="subnav-item"><span className="label">SYSTEM:</span> <span className="value">READY</span></span>
+          <span style={{ color: '#3d4f97' }}>|</span>
+          <span className="subnav-item"><span className="label">SESSION:</span> <span className="value">{activeChat ? (activeChat.display_name || activeChat.title) : 'NONE'}</span></span>
+        </div>
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+          <span className="subnav-item"><span className="value online">● ONLINE</span></span>
+          <Link to="/dev-console" className="subnav-item" style={{ textDecoration: 'none', color: '#f68d1f', fontWeight: '700' }}>DEV CONSOLE →</Link>
+        </div>
+      </div>
+
+      {/* 3. Main Workspace Grid */}
+      <div className="workspace-layout">
+        {/* Sidebar Rail */}
+        <aside className={`sidebar-panel ${sidebarOpen ? '' : 'collapsed'}`}>
+          <div className="sidebar-section-header">
+            <span>{sidebarOpen && "SESSION HISTORY"}</span>
+            <button className="btn-ghost" onClick={() => setSidebarOpen(!sidebarOpen)} title="Toggle Rail">
+              {sidebarOpen ? "◀" : "▶"}
+            </button>
+          </div>
+
+          <button className="sidebar-new-session-btn" onClick={handleCreateChat}>
+            <span>+</span> NEW SESSION
+          </button>
+
+          {sidebarOpen && (
+            <div className="sidebar-session-list">
+              {chats.length === 0 ? (
+                <div className="sidebar-empty">NO SESSIONS STORED</div>
+              ) : (
+                chats.map(chat => (
+                  <div 
+                    key={chat.id} 
+                    className={`sidebar-session-item ${activeChat?.id === chat.id ? 'active' : ''}`}
+                    onClick={() => selectChat(chat)}
+                  >
+                    <span className="session-item-icon">💬</span>
+                    <span className="session-item-name">
+                      {chat.display_name || chat.title}
+                    </span>
+                    <button 
+                      className="btn-ghost" 
+                      onClick={(e) => handleDeleteChat(chat.id, e)}
+                      style={{ fontSize: '11px', padding: '2px 4px' }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {sidebarOpen && (
+            <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid #5a5f8c', fontSize: '11px', color: '#21242e', fontFamily: 'Arial, Helvetica, sans-serif', fontWeight: '700' }}>
+              <div>USER: {user?.email}</div>
+              <div style={{ marginTop: '4px', opacity: 0.8 }}>ROLE: WORKSPACE ADM</div>
+            </div>
+          )}
+        </aside>
+
+        {/* Central Chat Feed */}
+        <main className="main-content-area">
+          {/* Header Strip for Active Session */}
+          <div className="section-label-bar">
+            <div className="label-title">
+              <span style={{ fontSize: '16px' }}>🖥️</span>
+              {isRenaming ? (
+                <form onSubmit={handleRenameChat} style={{ display: 'inline-flex', gap: '8px' }}>
+                  <input 
+                    type="text" 
+                    className="text-input"
+                    value={renameValue} 
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    maxLength={60}
+                    style={{ height: '28px', fontSize: '12px' }}
+                    autoFocus
+                  />
+                  <button type="submit" className="btn btn-submit" style={{ padding: '4px 10px', fontSize: '11px' }}>SAVE</button>
+                  <button type="button" className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => setIsRenaming(false)}>CANCEL</button>
+                </form>
+              ) : (
+                <span onClick={() => activeChat && setIsRenaming(true)} style={{ cursor: 'pointer' }}>
+                  {activeChat ? (activeChat.display_name || activeChat.title) : 'SELECT OR CREATE SESSION'}
+                  {activeChat && <span style={{ opacity: 0.6, marginLeft: '8px', fontSize: '11px' }}>✏️ RENAME</span>}
+                </span>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
               <select 
-                id="llm-provider" 
+                className="select-dropdown" 
                 value={provider} 
                 onChange={(e) => setProvider(e.target.value)}
+                style={{ height: '32px', fontSize: '11px', width: '150px' }}
               >
                 <option value="gemini">Gemini 1.5 Flash</option>
                 <option value="groq">Groq Llama 3</option>
               </select>
+
+              <button 
+                className="btn btn-primary" 
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+                style={{ fontSize: '11px', padding: '6px 12px' }}
+              >
+                {isUploading ? 'INDEXING...' : '📎 ATTACH DOC'}
+              </button>
             </div>
           </div>
-        </header>
 
-        <div className="chat-window">
-          {/* Shared Hidden File Input */}
+          {/* Hidden File Input */}
           <input 
             type="file" 
             ref={fileInputRef} 
@@ -447,112 +494,169 @@ const Dashboard = () => {
             accept=".pdf,.docx,.txt"
           />
 
+          {/* Feedback Banners */}
           {isUploading && (
-            <div className="upload-progress-card" style={{ margin: '12px auto' }}>
+            <div style={{ padding: '12px 24px', backgroundColor: '#dedede', color: '#21242e', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', fontWeight: '700', borderBottom: '1px solid #3d4f97' }}>
               <div className="spinner"></div>
-              <p>Uploading and compiling vector search index...</p>
+              <span>COMPILING VECTOR EMBEDDINGS & INDEXING SOURCE FILE...</span>
             </div>
           )}
 
-          {uploadError && <p className="upload-feedback error" style={{ margin: '8px auto' }}>{uploadError}</p>}
-          {uploadSuccess && <p className="upload-feedback success" style={{ margin: '8px auto' }}>{uploadSuccess}</p>}
+          {uploadError && (
+            <div style={{ padding: '12px 24px', backgroundColor: 'rgba(230,0,18,0.1)', color: '#e60012', borderBottom: '1px solid #e60012', fontWeight: '700', fontSize: '12px' }}>
+              ⚠️ UPLOAD ERROR: {uploadError}
+            </div>
+          )}
 
+          {uploadSuccess && (
+            <div style={{ padding: '12px 24px', backgroundColor: 'rgba(22,163,74,0.1)', color: '#16a34a', borderBottom: '1px solid #16a34a', fontWeight: '700', fontSize: '12px' }}>
+              ✓ INDEX VERIFIED: {uploadSuccess}
+            </div>
+          )}
+
+          {/* Empty State Hero */}
           {messages.length === 0 && !streamedResponse && (
-            <div className="empty-state-workspace">
-              <h3>Upload a Document to Begin</h3>
-              <p>Ask questions naturally and the assistant will retrieve relevant information before generating an answer.</p>
+            <div className="empty-state-hero">
+              <h1 className="empty-state-wordmark">LEXIS</h1>
+              <p className="empty-state-tagline">
+                Upload a document to generate embeddings and retrieve cited answers in real time.
+              </p>
 
-              {/* Upload Zone */}
               <div 
-                className="upload-dropzone" 
+                className="empty-state-upload-zone" 
                 onClick={() => fileInputRef.current?.click()}
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
               >
-                <span className="upload-icon">⬆</span>
-                <p>Drag & Drop Files here or <strong>Browse Files</strong></p>
-                <span className="upload-hint">Supports PDF, DOCX, TXT</span>
-              </div>
-            </div>
-          )}
-
-          {/* Messages Feed */}
-          {messages.map((m, idx) => (
-            <div key={idx} className={`message-bubble ${m.role}`}>
-              <div className="message-content">{m.content}</div>
-              <div className="message-meta-info">
-                <span>{m.provider ? `${m.provider.toUpperCase()} • ` : ''}</span>
-                <span>{new Date(m.created_at).toLocaleTimeString()}</span>
-              </div>
-            </div>
-          ))}
-
-          {/* Live stream response bubble */}
-          {streamedResponse && (
-            <div className="message-bubble assistant streaming">
-              <div className="message-content">{streamedResponse}</div>
-              <span className="streaming-cursor">█</span>
-            </div>
-          )}
-
-          {isGenerating && !streamedResponse && (
-            <div className="message-bubble assistant loading">
-              <div className="skeleton skeleton-paragraph" style={{ height: '40px', width: '200px' }}></div>
-            </div>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Chat input footer */}
-        <div className="chat-input-container">
-          <form onSubmit={handleSendQuery} className="chat-input-wrapper">
-            <textarea 
-              placeholder={activeChat?.current_doc_id ? "Ask anything about your documents..." : "Please upload a document to query..."}
-              value={queryText}
-              onChange={(e) => setQueryText(e.target.value)}
-              disabled={!activeChat?.current_doc_id || isGenerating}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendQuery();
-                }
-              }}
-            />
-            <button 
-              type="submit" 
-              className="btn btn-primary send-btn"
-              disabled={!queryText.trim() || isGenerating}
-            >
-              ➔
-            </button>
-          </form>
-        </div>
-      </main>
-
-      {/* 3. Retrieved Context Panel */}
-      <aside className="context-panel">
-        <h3 className="context-header">Retrieved Context & Citations</h3>
-        
-        {citations.length === 0 ? (
-          <div className="no-citations-state">
-            <p>Once you submit a query, relevant snippets and matching source score percentages will be cited here.</p>
-          </div>
-        ) : (
-          <div className="citations-list">
-            {citations.map((c, idx) => (
-              <div key={idx} className="citation-card">
-                <div className="citation-file">📄 {c.doc_filename || 'source document'}</div>
-                <div className="citation-meta">
-                  {c.page_number && <span className="citation-badge">Page {c.page_number}</span>}
-                  <span className="citation-badge success">Match verified</span>
+                <div className="upload-zone-icon">
+                  ▲
                 </div>
-                <p className="citation-text">"{c.excerpt}"</p>
+                <div className="upload-zone-text">
+                  DRAG & DROP PDF, DOCX, TXT FILES HERE OR <span style={{ color: '#f68d1f' }}>CLICK TO BROWSE</span>
+                </div>
+                <div className="upload-zone-hint">
+                  Automatic chunking, vector embedding, and citation matching
+                </div>
               </div>
-            ))}
+            </div>
+          )}
+
+          {/* Messages Stream Feed */}
+          {messages.length > 0 && (
+            <div className="chat-feed">
+              {messages.map((m, idx) => (
+                <div 
+                  key={idx} 
+                  className={`message-bubble ${m.role === 'user' ? 'message-bubble-user' : m.is_error ? 'message-bubble-error' : 'message-bubble-assistant'}`}
+                >
+                  <div style={{ marginBottom: '6px', whiteSpace: 'pre-wrap' }}>{m.content}</div>
+                  <div style={{ fontSize: '10px', opacity: 0.7, textTransform: 'uppercase', textAlign: m.role === 'user' ? 'right' : 'left' }}>
+                    {m.provider ? `${m.provider.toUpperCase()} • ` : ''}
+                    {new Date(m.created_at).toLocaleTimeString()}
+                  </div>
+                </div>
+              ))}
+
+              {/* Streaming Live Response */}
+              {streamedResponse && (
+                <div className="message-bubble message-bubble-assistant">
+                  <div style={{ whiteSpace: 'pre-wrap' }}>{streamedResponse}</div>
+                  <span className="streaming-cursor">█</span>
+                </div>
+              )}
+
+              {isGenerating && !streamedResponse && (
+                <div className="message-bubble message-bubble-assistant">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div className="spinner"></div>
+                    <span style={{ fontSize: '12px', fontWeight: '700' }}>SEARCHING VECTOR INDEX & STREAMING RESPONSE...</span>
+                  </div>
+                </div>
+              )}
+
+              <div ref={messagesEndRef} />
+            </div>
+          )}
+
+          {/* Sticky Input Bar */}
+          <div className="chat-input-bar">
+            <form onSubmit={handleSendQuery} className="chat-input-wrapper">
+              <textarea 
+                className="chat-textarea"
+                placeholder={activeChat?.current_doc_id ? "Type your query or instruction..." : "Attach a document to begin querying..."}
+                value={queryText}
+                onChange={(e) => setQueryText(e.target.value)}
+                disabled={!activeChat?.current_doc_id || isGenerating}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendQuery();
+                  }
+                }}
+              />
+              <button 
+                type="submit" 
+                className="chat-submit-btn"
+                disabled={!queryText.trim() || isGenerating}
+              >
+                ➔
+              </button>
+            </form>
           </div>
-        )}
-      </aside>
+        </main>
+
+        {/* Right Rail: Citations & Context */}
+        <aside className="right-rail-panel">
+          <div className="right-rail-section">
+            <div className="right-rail-section-header">
+              <div className="section-header-title">
+                <span>📑</span>
+                <span>RETRIEVED CONTEXT</span>
+              </div>
+              <span className="section-header-badge">{citations.length} SNIPPETS</span>
+            </div>
+
+            <div className="right-rail-section-body">
+              {citations.length === 0 ? (
+                <p style={{ fontSize: '12px', color: '#60619c', lineHeight: '1.5', margin: 0, fontStyle: 'italic' }}>
+                  No search snippets retrieved yet. Submit a query to display page quotes and verbatim document excerpts.
+                </p>
+              ) : (
+                citations.map((c, idx) => (
+                  <div key={idx} className="citation-card">
+                    <span className="citation-file">📄 {c.doc_filename || 'source document'}</span>
+                    <div className="citation-meta">
+                      {c.page_number && <span className="citation-badge citation-badge-page">PAGE {c.page_number}</span>}
+                      <span className="citation-badge citation-badge-match">MATCH VERIFIED</span>
+                    </div>
+                    <p className="citation-excerpt">"{c.excerpt}"</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Info Explainer Card */}
+          <div className="info-box" style={{ marginTop: 'auto' }}>
+            <div className="info-box-header">
+              SOURCE CITATION ENGINE
+            </div>
+            <div className="info-box-body">
+              Lexis builds vector index embeddings for uploaded documents. Every LLM response is grounded with verbatim source excerpts to eliminate hallucination.
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      {/* 4. Footer Bar */}
+      <footer className="footer-bar">
+        <div>© 2026 LEXIS CORP • CONSOLE CHROME ENGINE</div>
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+          <span className="esrb-badge">SOC 2 TYPE II</span>
+          <span className="esrb-badge">256-BIT AES</span>
+          <Link to="/dev-console" style={{ color: '#ecab37', textDecoration: 'none', fontWeight: '700' }}>DEV CONSOLE</Link>
+        </div>
+      </footer>
     </div>
   );
 };
