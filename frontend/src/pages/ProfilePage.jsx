@@ -100,7 +100,7 @@ const ProfilePage = () => {
         <NavigationBar />
         <main className="main-content page-container">
           <div className="page-header-title">
-            <h1 className="page-title">User Profile</h1>
+            <h2 className="page-title">User Profile</h2>
             <p className="page-subtitle">Manage workspace identity, view activity stats, and account settings.</p>
           </div>
           <div className="profile-layout-grid">

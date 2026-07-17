@@ -88,7 +88,7 @@ export const MessageContent = ({ content, citations, onCitationClick }) => {
     });
 
     // 3. Convert [Web N: Title](url) -> [🌐 Web N](web://url?href=...)
-    processed = processed.replace(/\[Web\s*(\d+)(?::\s*([^\]]+))?\]\((https?:\/\/[^\)]+)\)/g, (_, webNum, title, url) => {
+    processed = processed.replace(/\[Web\s*(\d+)(?::\s*([^\]]+))?\]\((https?:\/\/[^)]+)\)/g, (_, webNum, title, url) => {
       const cleanTitle = title || `Source ${webNum}`;
       return `[🌐 Web ${webNum}](web://url?href=${encodeURIComponent(url)}&title=${encodeURIComponent(cleanTitle)})`;
     });

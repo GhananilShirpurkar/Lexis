@@ -453,21 +453,24 @@ const Dashboard = () => {
     setUploadError('');
     setUploadSuccess('');
 
-    let targetChat = activeChat;
+    let targetChat;
 
     // Auto-create a chat session if none exists or none is selected
-    if (!targetChat) {
+    if (!activeChat) {
       try {
         const createRes = await apiClient.post('/chats', { title: file.name || 'New Chat' });
-        targetChat = createRes.data;
-        setChats(prev => [targetChat, ...prev]);
-        setActiveChat(targetChat);
+        const newChat = createRes.data;
+        setChats(prev => [newChat, ...prev]);
+        setActiveChat(newChat);
+        targetChat = newChat;
       } catch (chatErr) {
         console.error('Failed to auto-create chat session:', chatErr);
         setUploadError(chatErr.response?.data?.detail?.error?.message || 'Could not create a chat session for upload.');
         setIsUploading(false);
         return;
       }
+    } else {
+      targetChat = activeChat;
     }
 
     const formData = new FormData();
@@ -1333,36 +1336,60 @@ const Dashboard = () => {
 
       {deleteTargetChat && (
         <div className="modal-backdrop" onClick={() => setDeleteTargetChat(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px', border: '1px solid #e60012', boxShadow: '0 8px 32px rgba(230,0,18,0.25)' }}>
-            <div className="modal-header" style={{ borderBottom: '1px solid #e60012', paddingBottom: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <AlertTriangle className="icon" style={{ color: '#e60012' }} />
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '14px', letterSpacing: '0.05em', color: '#e60012', fontWeight: '800' }}>CONFIRM SESSION DELETION</h3>
-                  <span style={{ fontSize: '11px', color: '#9fbee7', textTransform: 'uppercase' }}>
-                    SESSION ID: {deleteTargetChat.id.substring(0, 13)}...
-                  </span>
-                </div>
+          <div className="modal-content modal-sm" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <AlertTriangle className="icon text-danger" />
+                <h3 className="modal-title">Delete Session</h3>
               </div>
-              <button className="icon-btn" onClick={() => setDeleteTargetChat(null)} style={{ background: 'none', border: 'none', color: '#9fbee7', fontSize: '18px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+              <button className="btn-icon text-btn" onClick={() => setDeleteTargetChat(null)}>
                 <X className="icon" />
               </button>
             </div>
 
-            <div className="modal-body" style={{ padding: '16px 0', color: '#dedede', fontSize: '13px', lineHeight: '1.5' }}>
-              Are you sure you want to permanently delete session <strong style={{ color: '#ecab37' }}>"{deleteTargetChat.display_name || deleteTargetChat.title}"</strong>? All associated query message history will be removed from memory.
+            {/* Body */}
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <p style={{ margin: 0, color: 'var(--color-body)', fontSize: '13px', lineHeight: '1.6' }}>
+                Are you sure you want to permanently delete this session?
+              </p>
+
+              <div style={{
+                background: 'var(--color-canvas-soft)',
+                border: '1px solid var(--color-hairline)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '10px 14px',
+              }}>
+                <p style={{ margin: 0, color: 'var(--color-ink)', fontWeight: 500, fontSize: '13px' }}>
+                  {deleteTargetChat.display_name || deleteTargetChat.title || 'Untitled Session'}
+                </p>
+                <p style={{ margin: '4px 0 0', color: 'var(--color-body-mid)', fontSize: '11px', fontFamily: 'var(--font-mono)' }}>
+                  Session ID: {deleteTargetChat.id.substring(0, 13).toUpperCase()}...
+                </p>
+              </div>
+
+              <p style={{ margin: 0, color: 'var(--color-body-mid)', fontSize: '12px', lineHeight: '1.5' }}>
+                All associated query message history will be removed from memory. This action cannot be undone.
+              </p>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', paddingTop: '12px', borderTop: '1px solid #3d4f97' }}>
-              <button className="btn btn-secondary" onClick={() => setDeleteTargetChat(null)} style={{ fontSize: '12px', padding: '6px 14px' }}>
+            {/* Footer */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '10px',
+              padding: 'var(--space-lg) var(--space-xl)',
+              borderTop: '1px solid var(--color-hairline)',
+            }}>
+              <button className="btn outline-btn" onClick={() => setDeleteTargetChat(null)}>
                 Cancel
               </button>
-              <button 
-                className="btn" 
+              <button
+                className="btn danger-btn"
                 onClick={confirmDeleteChat}
-                style={{ backgroundColor: '#e60012', color: '#ffffff', border: '1px solid #ff3344', fontWeight: '700', fontSize: '12px', padding: '6px 16px', borderRadius: '4px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(230,0,18,0.4)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
               >
-                <Trash2 className="icon-small" />
+                <Trash2 className="icon-sm" />
                 <span>Delete Session</span>
               </button>
             </div>

@@ -18,7 +18,7 @@ const SidebarNudgeBanner = () => {
   };
 
   return (
-    <div className="mx-3 my-2 p-3 bg-gradient-to-r from-cyan-950/40 via-cyan-900/20 to-purple-950/30 border border-cyan-500/30 rounded-xl glass-panel relative overflow-hidden group shadow-lg">
+    <div className="mx-3 my-2 p-3 bg-gradient-to-r from-cyan-950/40 via-cyan-900/20 to-cyan-950/35 border border-cyan-500/30 rounded-xl glass-panel relative overflow-hidden group shadow-lg">
       <div className="flex items-start gap-2.5">
         <div className="p-2 bg-cyan-500/10 rounded-lg text-cyan-400 border border-cyan-500/20 shrink-0">
           <Sparkles className="w-4 h-4" />

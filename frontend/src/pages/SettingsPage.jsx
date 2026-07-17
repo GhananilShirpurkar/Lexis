@@ -149,7 +149,7 @@ const SettingsPage = () => {
         <main className="main-content settings-page-container">
           <div className="settings-header">
             <div className="settings-header-left">
-              <h1 className="settings-title">Settings & Preferences</h1>
+              <h2 className="settings-title">Settings & Preferences</h2>
               <p className="settings-subtitle">Customize AI responses, search indexing, and account automation.</p>
             </div>
           </div>

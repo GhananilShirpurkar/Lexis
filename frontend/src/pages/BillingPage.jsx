@@ -79,7 +79,7 @@ const BillingPage = () => {
         <NavigationBar />
         <main className="main-content page-container">
           <div className="page-header-title">
-            <h1 className="page-title">Usage & Subscription</h1>
+            <h2 className="page-title">Usage & Subscription</h2>
             <p className="page-subtitle">Track resource quotas, select plans, and manage invoicing.</p>
           </div>
           <div className="billing-grid-container">
