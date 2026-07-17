@@ -2,7 +2,9 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import OnboardingGuard from './components/OnboardingGuard';
 import AuthPage from './pages/AuthPage';
+import OnboardingPage from './pages/OnboardingPage';
 import Dashboard from './pages/Dashboard';
 import DevConsole from './pages/DevConsole';
 import ProfilePage from './pages/ProfilePage';
@@ -17,10 +19,22 @@ function App() {
         <Routes>
           <Route path="/auth" element={<AuthPage />} />
           <Route
+            path="/onboarding"
+            element={
+              <ProtectedRoute>
+                <OnboardingGuard>
+                  <OnboardingPage />
+                </OnboardingGuard>
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/"
             element={
               <ProtectedRoute>
-                <Dashboard />
+                <OnboardingGuard>
+                  <Dashboard />
+                </OnboardingGuard>
               </ProtectedRoute>
             }
           />
@@ -28,7 +42,9 @@ function App() {
             path="/library"
             element={
               <ProtectedRoute>
-                <LibraryPage />
+                <OnboardingGuard>
+                  <LibraryPage />
+                </OnboardingGuard>
               </ProtectedRoute>
             }
           />
@@ -36,7 +52,9 @@ function App() {
             path="/dev-console"
             element={
               <ProtectedRoute>
-                <DevConsole />
+                <OnboardingGuard>
+                  <DevConsole />
+                </OnboardingGuard>
               </ProtectedRoute>
             }
           />
@@ -44,7 +62,9 @@ function App() {
             path="/profile"
             element={
               <ProtectedRoute>
-                <ProfilePage />
+                <OnboardingGuard>
+                  <ProfilePage />
+                </OnboardingGuard>
               </ProtectedRoute>
             }
           />
@@ -52,7 +72,9 @@ function App() {
             path="/settings"
             element={
               <ProtectedRoute>
-                <SettingsPage />
+                <OnboardingGuard>
+                  <SettingsPage />
+                </OnboardingGuard>
               </ProtectedRoute>
             }
           />
@@ -60,7 +82,9 @@ function App() {
             path="/billing"
             element={
               <ProtectedRoute>
-                <BillingPage />
+                <OnboardingGuard>
+                  <BillingPage />
+                </OnboardingGuard>
               </ProtectedRoute>
             }
           />

@@ -129,14 +129,22 @@ async def create_project(
     )
     db.add(unified_chat)
 
-    # Create project_chats junction records
-    for chat_id in chat_ids:
-        project_chat = ProjectChat(
-            id=uuid.uuid4(),
-            project_id=project.id,
-            chat_id=chat_id
-        )
-        db.add(project_chat)
+    # Create project_chats junction records via PostgreSQL Core bulk insert
+    if chat_ids:
+        project_chat_values = [
+            {
+                "id": uuid.uuid4(),
+                "project_id": project.id,
+                "chat_id": chat_id
+            }
+            for chat_id in chat_ids
+        ]
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        BATCH_SIZE = 500
+        for i in range(0, len(project_chat_values), BATCH_SIZE):
+            chunk = project_chat_values[i:i + BATCH_SIZE]
+            stmt = pg_insert(ProjectChat).values(chunk).on_conflict_do_nothing()
+            await db.execute(stmt)
 
     await db.commit()
 
@@ -167,17 +175,27 @@ async def list_projects(
     projects_result = await db.execute(projects_query)
     projects = projects_result.scalars().all()
 
+    if not projects:
+        return []
+
+    project_ids = [p.id for p in projects]
+
+    # Batch fetch unified chats in 1 query instead of N
+    unified_query = select(Chat).where(Chat.project_id.in_(project_ids), Chat.is_unified == True)
+    unified_result = await db.execute(unified_query)
+    unified_map = {c.project_id: c for c in unified_result.scalars().all()}
+
+    # Batch fetch member chat links in 1 query instead of N
+    member_query = select(ProjectChat.project_id, ProjectChat.chat_id).where(ProjectChat.project_id.in_(project_ids))
+    member_result = await db.execute(member_query)
+    member_map = {}
+    for proj_id, chat_id in member_result.all():
+        member_map.setdefault(proj_id, []).append(chat_id)
+
     response = []
     for proj in projects:
-        # Find unified chat
-        unified_query = select(Chat).where(Chat.project_id == proj.id, Chat.is_unified == True)
-        unified_result = await db.execute(unified_query)
-        unified_chat = unified_result.scalars().first()
-
-        # Find member chat ids
-        member_query = select(ProjectChat.chat_id).where(ProjectChat.project_id == proj.id)
-        member_result = await db.execute(member_query)
-        chat_ids = list(member_result.scalars().all())
+        unified_chat = unified_map.get(proj.id)
+        chat_ids = member_map.get(proj.id, [])
 
         response.append(
             ProjectDetailResponse(

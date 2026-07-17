@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import NavigationBar from '../components/NavigationBar';
 import apiClient from '../api/client';
+import { useToast } from '../context/ToastContext';
+import { optimisticUpdate, shakeElement } from '../utils/optimistic';
 import {
   Search,
   LayoutGrid,
@@ -26,6 +28,8 @@ import {
 
 const LibraryPage = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const docGridRef = useRef(null);
 
   // State
   const [documents, setDocuments] = useState([]);
@@ -46,8 +50,6 @@ const LibraryPage = () => {
 
   const [deleteDoc, setDeleteDoc] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-
-  const [uploadModalOpen, setUploadModalOpen] = useState(false);
 
   useEffect(() => {
     fetchDocuments();
@@ -202,28 +204,40 @@ const LibraryPage = () => {
     setRenameValue(doc.filename);
   };
 
-  // Submit Rename
+  // Submit Rename (Optimistic)
   const handleRenameSubmit = async (e) => {
     e.preventDefault();
     if (!renameValue.trim() || !renameDoc) return;
-    setRenameLoading(true);
-    try {
-      const res = await apiClient.patch(`/documents/${renameDoc.id}`, {
-        filename: renameValue.trim()
-      });
-      setDocuments((prev) =>
-        prev.map((d) => (d.id === renameDoc.id ? res.data : d))
-      );
-      if (previewDoc?.id === renameDoc.id) {
-        setPreviewDoc(res.data);
-      }
-      setRenameDoc(null);
-    } catch (err) {
-      console.error('Rename failed:', err);
-      alert(err.response?.data?.detail?.error?.message || 'Failed to rename document.');
-    } finally {
-      setRenameLoading(false);
-    }
+    const targetDoc = renameDoc;
+    const newFilename = renameValue.trim();
+    const previousDocs = [...documents];
+    const previousPreviewDoc = previewDoc;
+
+    setRenameDoc(null);
+
+    await optimisticUpdate({
+      optimisticFn: () => {
+        const updated = { ...targetDoc, filename: newFilename };
+        setDocuments((prev) => prev.map((d) => (d.id === targetDoc.id ? updated : d)));
+        if (previewDoc?.id === targetDoc.id) {
+          setPreviewDoc(updated);
+        }
+      },
+      apiCall: async () => {
+        const res = await apiClient.patch(`/documents/${targetDoc.id}`, { filename: newFilename });
+        setDocuments((prev) => prev.map((d) => (d.id === targetDoc.id ? res.data : d)));
+        if (previewDoc?.id === targetDoc.id) {
+          setPreviewDoc(res.data);
+        }
+      },
+      rollbackFn: () => {
+        setDocuments(previousDocs);
+        setPreviewDoc(previousPreviewDoc);
+      },
+      errorMessage: `⚠️ Couldn't rename document "${targetDoc.filename}". Restored.`,
+      targetRef: docGridRef,
+      toast
+    });
   };
 
   // Open Delete Modal
@@ -232,29 +246,38 @@ const LibraryPage = () => {
     setDeleteDoc(doc);
   };
 
-  // Confirm Delete
+  // Confirm Delete (Optimistic)
   const handleDeleteConfirm = async () => {
     if (!deleteDoc) return;
-    setDeleteLoading(true);
-    try {
-      await apiClient.delete(`/documents/${deleteDoc.id}`);
-      setDocuments((prev) => prev.filter((d) => d.id !== deleteDoc.id));
-      if (previewDoc?.id === deleteDoc.id) {
-        setPreviewDoc(null);
-      }
-      setDeleteDoc(null);
-    } catch (err) {
-      console.error('Delete failed:', err);
-      alert(err.response?.data?.detail?.error?.message || 'Failed to delete document.');
-    } finally {
-      setDeleteLoading(false);
-    }
+    const targetDoc = deleteDoc;
+    const previousDocs = [...documents];
+    const previousPreviewDoc = previewDoc;
+
+    setDeleteDoc(null);
+
+    await optimisticUpdate({
+      optimisticFn: () => {
+        setDocuments((prev) => prev.filter((d) => d.id !== targetDoc.id));
+        if (previewDoc?.id === targetDoc.id) {
+          setPreviewDoc(null);
+        }
+      },
+      apiCall: async () => {
+        await apiClient.delete(`/documents/${targetDoc.id}`);
+      },
+      rollbackFn: () => {
+        setDocuments(previousDocs);
+        setPreviewDoc(previousPreviewDoc);
+      },
+      errorMessage: `⚠️ Couldn't delete document "${targetDoc.filename}". Restored.`,
+      targetRef: docGridRef,
+      toast
+    });
   };
 
   // Query in Dashboard
   const handleQueryWithLexis = (doc, e) => {
     if (e) e.stopPropagation();
-    // Navigate to dashboard root
     navigate('/', { state: { selectDocId: doc.id } });
   };
 
@@ -274,11 +297,11 @@ const LibraryPage = () => {
 
           <div className="library-header-right">
             <button
-              className="btn primary-btn btn-glow upload-cta-btn"
-              onClick={() => setUploadModalOpen(true)}
+              className="btn outline-btn upload-notice-link-btn"
+              onClick={() => navigate('/')}
             >
-              <Upload className="icon" />
-              <span>Upload Document</span>
+              <MessageSquare className="icon text-accent" />
+              <span>Upload & Query in Chat →</span>
             </button>
           </div>
         </div>
@@ -387,7 +410,7 @@ const LibraryPage = () => {
               {searchQuery || typeFilter !== 'all' ? (
                 <Search className="icon-lg text-muted" />
               ) : (
-                <Upload className="icon-lg text-accent" />
+                <MessageSquare className="icon-lg text-accent" />
               )}
             </div>
             <h3 className="empty-title">
@@ -398,7 +421,7 @@ const LibraryPage = () => {
             <p className="empty-desc">
               {searchQuery || typeFilter !== 'all'
                 ? 'Try adjusting your search keywords or resetting file filters.'
-                : 'Upload your first document on the Query Dashboard to start searching and reasoning with Lexis.'}
+                : 'Upload documents while conversing with Lexis on the Query Dashboard to view and manage your uploaded documents here.'}
             </p>
             {searchQuery || typeFilter !== 'all' ? (
               <button
@@ -413,16 +436,16 @@ const LibraryPage = () => {
             ) : (
               <button
                 className="btn primary-btn btn-glow"
-                onClick={() => setUploadModalOpen(true)}
+                onClick={() => navigate('/')}
               >
-                <Upload className="icon" />
-                <span>Upload First Document</span>
+                <MessageSquare className="icon" />
+                <span>Go to Query Dashboard</span>
               </button>
             )}
           </div>
         ) : (
           /* Grouped Document Feed */
-          <div className="library-feed">
+          <div ref={docGridRef} className="library-feed">
             {groupedDocuments.map(([groupName, docs]) => (
               <div key={groupName} className="date-group-section">
                 <div className="date-group-header">
@@ -741,46 +764,6 @@ const LibraryPage = () => {
                 disabled={deleteLoading}
               >
                 {deleteLoading ? <Loader2 className="icon animate-spin" /> : 'Delete Permanently'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Upload Guidance CTA Modal */}
-      {uploadModalOpen && (
-        <div className="modal-backdrop" onClick={() => setUploadModalOpen(false)}>
-          <div className="modal-content glass-panel upload-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title-group">
-                <Upload className="icon text-accent" />
-                <h3 className="modal-title">Upload Documents</h3>
-              </div>
-              <button className="btn-icon text-btn" onClick={() => setUploadModalOpen(false)}>
-                <X className="icon" />
-              </button>
-            </div>
-
-            <div className="modal-body text-center py-4">
-              <div className="upload-notice-icon-box">
-                <MessageSquare className="icon-lg text-accent" />
-              </div>
-              <h4 className="upload-notice-heading">Upload via the Query Dashboard</h4>
-              <p className="upload-notice-desc">
-                Documents are uploaded directly in the Query Dashboard so that Lexis can immediately bind them to an active chat session and parse vector citations in real-time.
-              </p>
-            </div>
-
-            <div className="modal-footer flex-center">
-              <button
-                className="btn primary-btn btn-glow"
-                onClick={() => {
-                  setUploadModalOpen(false);
-                  navigate('/');
-                }}
-              >
-                <span>Go to Query Dashboard</span>
-                <ChevronRight className="icon" />
               </button>
             </div>
           </div>

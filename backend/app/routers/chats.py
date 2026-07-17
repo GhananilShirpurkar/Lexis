@@ -17,6 +17,7 @@ from app.models.citation import Citation
 from app.schemas.chat import ChatCreate, ChatUpdate, ChatResponse, ChatDetailResponse, MessageResponse, MessageSubmit
 from app.storage.r2_client import delete_file
 from app.config import settings
+from app.cache import cache
 
 router = APIRouter(
     prefix="/chats",
@@ -103,6 +104,7 @@ async def create_chat(
     await db.commit()
     await db.refresh(new_chat)
 
+    await cache.delete_pattern(f"user:{user_id}:chats:*")
     return new_chat
 
 
@@ -115,18 +117,28 @@ async def create_chat(
 )
 async def list_chats(
     request: Request,
+    limit: int = 50,
+    offset: int = 0,
     db: AsyncSession = Depends(get_db)
 ):
     user_id = request.state.user_id
+    cache_key = f"user:{user_id}:chats:{limit}:{offset}"
+    cached = await cache.get(cache_key)
+    if cached:
+        return [ChatResponse(**c) for c in cached]
 
     query = (
         select(Chat)
         .where(Chat.user_id == user_id)
         .order_by(Chat.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
     result = await db.execute(query)
     chats = result.scalars().all()
 
+    chats_dump = [ChatResponse.model_validate(c).model_dump(mode="json") for c in chats]
+    await cache.set(cache_key, chats_dump, ttl=120)
     return chats
 
 
@@ -143,6 +155,10 @@ async def get_chat(
     db: AsyncSession = Depends(get_db)
 ):
     user_id = request.state.user_id
+    cache_key = f"chat:{chat_id}:meta"
+    cached = await cache.get(cache_key)
+    if cached:
+        return ChatDetailResponse(**cached)
 
     # Join or fetch messages eagerly if needed, standard query with ownership check
     query = (
@@ -164,6 +180,8 @@ async def get_chat(
             }
         )
 
+    chat_dump = ChatDetailResponse.model_validate(chat).model_dump(mode="json")
+    await cache.set(cache_key, chat_dump, ttl=120)
     return chat
 
 
@@ -177,9 +195,15 @@ async def get_chat(
 async def get_chat_messages(
     request: Request,
     chat_id: uuid.UUID,
+    limit: int = 50,
+    offset: int = 0,
     db: AsyncSession = Depends(get_db)
 ):
     user_id = request.state.user_id
+    cache_key = f"chat:{chat_id}:messages:{limit}:{offset}"
+    cached = await cache.get(cache_key)
+    if cached:
+        return [MessageResponse(**m) for m in cached]
 
     # 1. Verify chat ownership first to prevent leaking message history of foreign chats
     chat_query = select(Chat).where(Chat.id == chat_id, Chat.user_id == user_id)
@@ -198,15 +222,24 @@ async def get_chat_messages(
         )
 
     # 2. Fetch messages ordered by created_at ASC with citations
+    from sqlalchemy import case
     messages_query = (
         select(Message)
         .where(Message.chat_id == chat_id)
-        .order_by(Message.created_at.asc())
+        .order_by(
+            Message.created_at.asc(),
+            case((Message.role == "user", 0), else_=1).asc(),
+            Message.id.asc()
+        )
+        .limit(limit)
+        .offset(offset)
         .options(selectinload(Message.citations).selectinload(Citation.document))
     )
     messages_result = await db.execute(messages_query)
     messages = messages_result.scalars().all()
 
+    messages_dump = [MessageResponse.model_validate(m).model_dump(mode="json") for m in messages]
+    await cache.set(cache_key, messages_dump, ttl=60)
     return messages
 
 
@@ -275,8 +308,51 @@ async def submit_message(
             media_type="text/event-stream"
         )
 
-    # 2. Check if there is an associated document
-    if not chat.current_doc_id:
+    # 1.6. Route workspace chats to workspace query pipeline
+    if chat.is_workspace_chat:
+        from sqlalchemy import select as sa_select
+        from app.models.workspace import WorkspaceChatMetadata
+        meta_result = await db.execute(
+            sa_select(WorkspaceChatMetadata).where(WorkspaceChatMetadata.chat_id == chat.id)
+        )
+        ws_meta = meta_result.scalars().first()
+        if not ws_meta:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": {
+                        "code": "WORKSPACE_NOT_FOUND",
+                        "message": "This workspace chat is not associated with any workspace."
+                    }
+                }
+            )
+        provider = payload.provider
+        if not provider:
+            provider = chat.last_provider or "gemini"
+        if provider not in ["gemini", "groq"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": {
+                        "code": "INVALID_PROVIDER",
+                        "message": f"Unsupported provider: {provider}. Supported: gemini, groq"
+                    }
+                }
+            )
+        from app.rag.pipeline import query_workspace
+        return StreamingResponse(
+            query_workspace(
+                workspace_id=ws_meta.workspace_id,
+                workspace_chat_id=chat.id,
+                user_message=payload.content,
+                provider=provider,
+                db=db
+            ),
+            media_type="text/event-stream"
+        )
+
+    # 2. Check if there is an associated document (bypassed when web search is enabled)
+    if not chat.current_doc_id and not payload.web_search:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -287,37 +363,38 @@ async def submit_message(
             }
         )
 
-    # 3. Fetch document and check status / expiry
-    doc_query = select(Document).where(Document.id == chat.current_doc_id, Document.user_id == user_id)
-    doc_result = await db.execute(doc_query)
-    doc = doc_result.scalars().first()
+    # 3. Fetch document and check status / expiry (only if a document is attached)
+    if chat.current_doc_id:
+        doc_query = select(Document).where(Document.id == chat.current_doc_id, Document.user_id == user_id)
+        doc_result = await db.execute(doc_query)
+        doc = doc_result.scalars().first()
 
-    if not doc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "error": {
-                    "code": "DOCUMENT_NOT_FOUND",
-                    "message": "The document associated with this chat could not be found."
+        if not doc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": {
+                        "code": "DOCUMENT_NOT_FOUND",
+                        "message": "The document associated with this chat could not be found."
+                    }
                 }
-            }
-        )
+            )
 
-    # Expiry check
-    now = datetime.now(timezone.utc)
-    doc_expiry = doc.expiry_at
-    if doc_expiry.tzinfo is None:
-        doc_expiry = doc_expiry.replace(tzinfo=timezone.utc)
-    if doc_expiry < now:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "error": {
-                    "code": "DOCUMENT_EXPIRED",
-                    "message": "Document expired, please re-upload"
+        # Expiry check
+        now = datetime.now(timezone.utc)
+        doc_expiry = doc.expiry_at
+        if doc_expiry.tzinfo is None:
+            doc_expiry = doc_expiry.replace(tzinfo=timezone.utc)
+        if doc_expiry < now:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": {
+                        "code": "DOCUMENT_EXPIRED",
+                        "message": "Document expired, please re-upload"
+                    }
                 }
-            }
-        )
+            )
 
     # 4. Resolve provider
     provider = payload.provider
@@ -336,10 +413,16 @@ async def submit_message(
             }
         )
 
-    # 5. Call query generator and stream
+    # 5. Call query generator and stream (pass web_search flag)
     from app.rag.pipeline import query as rag_query
     return StreamingResponse(
-        rag_query(chat_id=chat.id, user_message=payload.content, provider=provider, db=db),
+        rag_query(
+            chat_id=chat.id,
+            user_message=payload.content,
+            provider=provider,
+            db=db,
+            web_search_enabled=payload.web_search
+        ),
         media_type="text/event-stream"
     )
 
@@ -423,6 +506,9 @@ async def update_chat(
     await db.commit()
     await db.refresh(chat)
 
+    await cache.delete_pattern(f"user:{user_id}:chats:*")
+    await cache.delete(f"chat:{chat_id}:meta")
+
     return chat
 
 
@@ -460,6 +546,10 @@ async def delete_chat(
     # 2. Delete the chat record (cascade deletes messages and project memberships automatically)
     await db.delete(chat)
     await db.commit()
+
+    await cache.delete_pattern(f"user:{user_id}:chats:*")
+    await cache.delete(f"chat:{chat_id}:meta")
+    await cache.delete_pattern(f"chat:{chat_id}:messages:*")
 
     # 3. If there was a linked document, check if it's now orphaned
     if doc_id_to_check:

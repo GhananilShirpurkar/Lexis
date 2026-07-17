@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   CreditCard, Zap, Check, Calendar, 
-  ArrowRight, Download, AlertTriangle, RefreshCw 
+  ArrowRight, Download, AlertTriangle, RefreshCw, FileText
 } from '../components/icons';
 import apiClient from '../api/client';
 import NavigationBar from '../components/NavigationBar';
@@ -53,20 +53,20 @@ const BillingPage = () => {
   const plans = [
     {
       id: 'free', name: 'Free', price: '$0', period: '/month',
-      description: 'Get started with Lexis',
-      features: ['100 queries/month', '10 documents', '100 MB storage', 'Community support'],
+      description: 'Get started with Lexis RAG intelligence',
+      features: ['100 queries / month', '10 document uploads', '100 MB vector storage', 'Standard AI models', 'Community support'],
       cta: 'Current Plan', disabled: true
     },
     {
-      id: 'pro', name: 'Pro', price: '$19', period: '/month',
-      description: 'For power users',
-      features: ['2,000 queries/month', '100 documents', '5 GB storage', 'Priority support', 'Custom models'],
+      id: 'pro', name: 'Pro Specialist', price: '$19', period: '/month',
+      description: 'Designed for active researchers & practitioners',
+      features: ['2,000 queries / month', '100 document uploads', '5 GB vector storage', 'Priority deep-indexing', 'Custom model selection'],
       cta: 'Upgrade to Pro', disabled: false, highlighted: true
     },
     {
-      id: 'team', name: 'Team', price: '$49', period: '/user/month',
-      description: 'For teams',
-      features: ['Unlimited queries', 'Unlimited documents', '50 GB storage', 'SSO & SAML', 'Admin dashboard', 'API access'],
+      id: 'team', name: 'Enterprise Team', price: '$49', period: '/user/month',
+      description: 'Collaborative AI knowledge base for teams',
+      features: ['Unlimited queries', 'Unlimited document storage', '50 GB shared storage', 'SSO & SAML Security', 'Dedicated vector cluster', '24/7 Priority Support'],
       cta: 'Contact Sales', disabled: false
     }
   ];
@@ -75,71 +75,74 @@ const BillingPage = () => {
 
   if (loading) {
     return (
-      <div className="app-shell">
+      <div className="app-layout">
         <NavigationBar />
-        <div className="page-shell">
-          <div className="page-header-bar">
-            <CreditCard className="icon" />
-            <h1>BILLING</h1>
+        <main className="main-content page-container">
+          <div className="page-header-title">
+            <h1 className="page-title">Usage & Subscription</h1>
+            <p className="page-subtitle">Track resource quotas, select plans, and manage invoicing.</p>
           </div>
-          <div className="billing-usage-grid">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="usage-card">
-                <div className="skeleton-line" style={{ height: 80 }} />
-              </div>
-            ))}
+          <div className="billing-grid-container">
+            <div className="glass-panel usage-card skeleton" style={{ height: 140 }} />
+            <div className="glass-panel usage-card skeleton" style={{ height: 140 }} />
+            <div className="glass-panel usage-card skeleton" style={{ height: 140 }} />
           </div>
-        </div>
+        </main>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="app-shell">
+      <div className="app-layout">
         <NavigationBar />
-        <div className="page-shell">
-          <div className="page-header-bar">
-            <CreditCard className="icon" />
-            <h1>BILLING</h1>
+        <main className="main-content page-container">
+          <div className="glass-panel error-card-box">
+            <AlertTriangle className="icon-lg text-danger" />
+            <h3>Billing Data Unavailable</h3>
+            <p>{error}</p>
+            <button className="btn primary-btn mt-4" onClick={fetchBillingData}>
+              <RefreshCw className="icon-sm" />
+              <span>Retry Loading</span>
+            </button>
           </div>
-          <div className="profile-card error-state">
-            <AlertTriangle className="icon-large" />
-            <p>{error} <button onClick={fetchBillingData}>Retry</button></p>
-          </div>
-        </div>
+        </main>
       </div>
     );
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-layout">
       <NavigationBar />
-      <div className="page-shell">
-        <div className="page-header-bar">
-          <CreditCard className="icon" />
-          <h1>BILLING</h1>
+
+      <main className="main-content page-container">
+        {/* Page Header */}
+        <div className="page-header-title">
+          <h1 className="page-title">Usage & Subscription</h1>
+          <p className="page-subtitle">
+            Monitor real-time consumption limits, upgrade tier plans, and download past invoices.
+          </p>
         </div>
 
-        {/* Usage Overview */}
+        {/* Usage Overview Grid */}
         <div className="billing-usage-grid">
-          <UsageCard
-            icon={<Zap className="icon" />}
-            label="Queries"
+          <UsageMetricCard
+            icon={<Zap className="icon text-accent" />}
+            label="Queries Consumed"
             used={u.qUsed}
             limit={u.qLimit}
             percent={usagePercent(u.qUsed, u.qLimit)}
           />
-          <UsageCard
-            icon={<Calendar className="icon" />}
-            label="Documents"
+          <UsageMetricCard
+            icon={<FileText className="icon text-accent" />}
+            label="Documents Indexed"
             used={u.dUsed}
             limit={u.dLimit}
             percent={usagePercent(u.dUsed, u.dLimit)}
           />
-          <UsageCard
-            icon={<Download className="icon" />}
-            label="Storage"
+          <UsageMetricCard
+            icon={<CreditCard className="icon text-accent" />}
+            label="Vector Storage"
             used={u.sUsed}
             limit={u.sLimit}
             percent={usagePercent(u.sUsed, u.sLimit)}
@@ -147,48 +150,69 @@ const BillingPage = () => {
           />
         </div>
 
-        {/* Plan Selection */}
-        <div className="billing-plans">
-          <h2>Choose Your Plan</h2>
-          <div className="plans-grid">
-            {plans.map(p => (
-              <div 
-                key={p.id} 
-                className={`plan-card ${p.highlighted ? 'highlighted' : ''} ${u.plan === p.id ? 'current' : ''}`}
-              >
-                {p.highlighted && <span className="plan-badge-popular">POPULAR</span>}
-                {u.plan === p.id && <span className="plan-badge-current">CURRENT</span>}
-                
-                <h3>{p.name}</h3>
-                <div className="plan-price">
-                  <span className="price">{p.price}</span>
-                  <span className="period">{p.period}</span>
-                </div>
-                <p className="plan-desc">{p.description}</p>
-                
-                <ul className="plan-features">
-                  {p.features.map((f, i) => (
-                    <li key={i}><Check className="icon-small" />{f}</li>
-                  ))}
-                </ul>
-                
-                <button 
-                  className={`plan-cta ${p.disabled ? 'disabled' : p.highlighted ? 'primary' : 'secondary'}`}
-                  disabled={p.disabled}
+        {/* Subscription Tier Cards */}
+        <div className="billing-plans-section">
+          <div className="section-title-box">
+            <h2>Select Membership Plan</h2>
+            <p className="text-secondary">Scale vector indexing and model inference as your workflow expands.</p>
+          </div>
+
+          <div className="plans-grid-three">
+            {plans.map(p => {
+              const isCurrent = u.plan === p.id;
+              return (
+                <div 
+                  key={p.id} 
+                  className={`glass-panel plan-tier-card ${p.highlighted ? 'highlighted-plan' : ''} ${isCurrent ? 'current-plan' : ''}`}
                 >
-                  {p.cta}
-                  {!p.disabled && <ArrowRight className="icon-small" />}
-                </button>
-              </div>
-            ))}
+                  {p.highlighted && <span className="tier-pill badge-popular">MOST POPULAR</span>}
+                  {isCurrent && <span className="tier-pill badge-current">CURRENT TIER</span>}
+                  
+                  <h3 className="plan-name">{p.name}</h3>
+                  <div className="plan-price-row">
+                    <span className="price-val">{p.price}</span>
+                    <span className="period-lbl">{p.period}</span>
+                  </div>
+                  <p className="plan-description">{p.description}</p>
+                  
+                  <ul className="plan-feature-list">
+                    {p.features.map((f, i) => (
+                      <li key={i} className="feature-item">
+                        <Check className="icon-xs text-accent" />
+                        <span>{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  
+                  <button 
+                    type="button"
+                    className={`btn plan-action-btn ${isCurrent ? 'outline-btn disabled' : p.highlighted ? 'primary-btn' : 'outline-btn'}`}
+                    disabled={isCurrent || p.disabled}
+                    onClick={() => alert(`Upgrading to ${p.name} tier plan...`)}
+                  >
+                    <span>{isCurrent ? 'Current Active Plan' : p.cta}</span>
+                    {!isCurrent && <ArrowRight className="icon-xs" />}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        {/* Invoice History */}
+        {/* Invoice Statements Table */}
         {invoices.length > 0 && (
-          <div className="billing-invoices">
-            <h2>Invoice History</h2>
-            <div className="invoice-list">
+          <div className="billing-invoices-section mt-6">
+            <div className="section-title-box">
+              <h2>Invoice Statements</h2>
+            </div>
+            <div className="glass-panel invoices-table-container">
+              <div className="invoice-row header-row">
+                <span>Date</span>
+                <span>Description</span>
+                <span>Amount</span>
+                <span>Status</span>
+                <span className="text-right">Receipt</span>
+              </div>
               {invoices.map(inv => (
                 <div key={inv.id} className="invoice-row">
                   <span className="invoice-date">
@@ -196,33 +220,46 @@ const BillingPage = () => {
                   </span>
                   <span className="invoice-desc">{inv.description}</span>
                   <span className="invoice-amount">{inv.amount}</span>
-                  <span className={`invoice-status status-${inv.status}`}>{inv.status}</span>
-                  <button className="btn-ghost"><Download className="icon-small" /></button>
+                  <span>
+                    <span className={`status-pill status-${inv.status}`}>{inv.status}</span>
+                  </span>
+                  <div className="text-right">
+                    <button 
+                      type="button"
+                      className="btn-icon text-btn"
+                      title="Download Invoice PDF"
+                    >
+                      <Download className="icon-sm" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 };
 
-const UsageCard = ({ icon, label, used, limit, percent, unit = '' }) => (
-  <div className="usage-card">
-    <div className="usage-header">
+const UsageMetricCard = ({ icon, label, used, limit, percent, unit = '' }) => (
+  <div className="glass-panel usage-metric-card">
+    <div className="usage-metric-header">
       {icon}
-      <span>{label}</span>
+      <span className="usage-metric-label">{label}</span>
     </div>
-    <div className="usage-bar">
+    <div className="usage-progress-track">
       <div 
-        className="usage-fill" 
+        className="usage-progress-bar" 
         style={{ width: `${percent}%` }}
       />
     </div>
-    <span className="usage-text">
-      {used}{unit} / {limit >= 999999 || limit === Infinity ? '∞' : `${limit}${unit}`}
-    </span>
+    <div className="usage-metric-footer">
+      <span className="usage-value-text">
+        <strong>{used}</strong>{unit} of {limit >= 999999 || limit === Infinity ? 'Unlimited' : `${limit}${unit}`}
+      </span>
+      <span className="usage-percent-text">{Math.round(percent)}%</span>
+    </div>
   </div>
 );
 

@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { 
   User, Mail, Calendar, Shield, Edit2, Check, X, 
-  Trash2, AlertTriangle, RefreshCw 
+  Trash2, AlertTriangle, RefreshCw, Sparkles, FileText, Search, Database, Lock
 } from '../components/icons';
 import apiClient from '../api/client';
 import NavigationBar from '../components/NavigationBar';
@@ -18,6 +18,12 @@ const ProfilePage = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
+
+  // Delete Modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [password, setPassword] = useState('');
+  const [confirmText, setConfirmText] = useState('');
+  const [deleteError, setDeleteError] = useState('');
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
@@ -63,79 +69,101 @@ const ProfilePage = () => {
     }
   };
 
-  const handleDelete = async () => {
-    if (!window.confirm('PERMANENTLY delete your account and ALL data? This cannot be undone.')) {
-      return;
-    }
+  const handleConfirmDelete = async (e) => {
+    e.preventDefault();
+    if (!password || confirmText.trim() !== 'DELETE MY ACCOUNT') return;
+
     setDeleting(true);
+    setDeleteError('');
+
     try {
-      await apiClient.delete('/users/me');
+      await apiClient.delete('/users/me', {
+        data: {
+          password: password,
+          confirm_text: confirmText.trim()
+        }
+      });
+      
       logout();
-      navigate('/auth');
+      navigate('/auth', { state: { message: 'Your account and all associated data have been permanently deleted.' } });
     } catch (err) {
-      setSaveStatus({ type: 'error', message: 'Failed to delete account' });
+      console.error('Failed to delete account:', err);
+      const detail = err.response?.data?.detail;
+      setDeleteError(typeof detail === 'string' ? detail : detail?.message || 'Failed to delete account. Please verify your password.');
       setDeleting(false);
     }
   };
 
   if (loading) {
     return (
-      <div className="app-shell">
+      <div className="app-layout">
         <NavigationBar />
-        <div className="page-shell">
-          <div className="page-header-bar">
-            <User className="icon" />
-            <h1>PROFILE</h1>
+        <main className="main-content page-container">
+          <div className="page-header-title">
+            <h1 className="page-title">User Profile</h1>
+            <p className="page-subtitle">Manage workspace identity, view activity stats, and account settings.</p>
           </div>
-          <div className="profile-layout">
-            <div className="profile-card avatar-card" style={{ height: 300, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              <RefreshCw className="icon-large spin" />
-              <span className="loading-text" style={{ marginTop: 12 }}>Loading profile...</span>
-            </div>
+          <div className="profile-layout-grid">
+            <div className="glass-panel profile-hero-card skeleton" style={{ height: 320 }} />
+            <div className="glass-panel profile-details-card skeleton" style={{ height: 320 }} />
           </div>
-        </div>
+        </main>
       </div>
     );
   }
 
   if (!profile) {
     return (
-      <div className="app-shell">
+      <div className="app-layout">
         <NavigationBar />
-        <div className="page-shell">
-          <div className="page-header-bar">
-            <User className="icon" />
-            <h1>PROFILE</h1>
+        <main className="main-content page-container">
+          <div className="glass-panel error-card-box">
+            <AlertTriangle className="icon-lg text-danger" />
+            <h3>Failed to Load Profile</h3>
+            <p>We encountered an issue connecting to your user profile session.</p>
+            <button className="btn primary-btn mt-4" onClick={fetchProfile}>
+              <RefreshCw className="icon-sm" />
+              <span>Retry Connection</span>
+            </button>
           </div>
-          <div className="profile-card error-state">
-            <AlertTriangle className="icon-large" />
-            <p>Failed to load profile. <button onClick={fetchProfile}>Retry</button></p>
-          </div>
-        </div>
+        </main>
       </div>
     );
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-layout">
       <NavigationBar />
-      <div className="page-shell">
-        <div className="page-header-bar">
-          <User className="icon" />
-          <h1>PROFILE</h1>
+
+      <main className="main-content page-container">
+        {/* Page Header */}
+        <div className="page-header-title">
+          <h1 className="page-title">User Profile & Identity</h1>
+          <p className="page-subtitle">
+            Manage your display identity, view document usage metrics, and security settings.
+          </p>
         </div>
 
-        <div className="profile-layout">
-          {/* Left: Avatar & Quick Stats */}
-          <div className="profile-card avatar-card">
-            <div className="profile-avatar-xl">
-              {(profile.display_name || profile.email)?.[0]?.toUpperCase()}
+        {/* Profile Grid */}
+        <div className="profile-layout-grid">
+          {/* Left Column: Avatar & Quick Metrics */}
+          <div className="glass-panel profile-hero-card">
+            <div className="avatar-wrapper">
+              <div className="avatar-circle-lg overflow-hidden">
+                {profile.avatar_url ? (
+                  <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                ) : (
+                  (profile.display_name || profile.email)?.[0]?.toUpperCase() || 'U'
+                )}
+              </div>
+              <span className="user-role-badge">{profile.role || 'Workspace Member'}</span>
             </div>
-            
+
             {isEditing ? (
-              <div className="profile-edit-name">
+              <div className="profile-edit-box">
                 <input
                   type="text"
+                  className="profile-input-field"
                   value={editName}
                   onChange={e => setEditName(e.target.value)}
                   placeholder="Display name"
@@ -143,117 +171,264 @@ const ProfilePage = () => {
                   autoFocus
                   onKeyDown={e => e.key === 'Enter' && handleSave()}
                 />
-                <div className="profile-edit-actions">
-                  <button className="btn-ghost" onClick={() => {
-                    setIsEditing(false);
-                    setEditName(profile.display_name || '');
-                  }} disabled={saving}>
-                    <X className="icon-small" />
+                <div className="profile-edit-btn-group">
+                  <button 
+                    type="button"
+                    className="btn outline-btn btn-sm" 
+                    onClick={() => {
+                      setIsEditing(false);
+                      setEditName(profile.display_name || '');
+                    }} 
+                    disabled={saving}
+                  >
+                    <X className="icon-xs" />
                   </button>
-                  <button className="btn-primary" onClick={handleSave} disabled={saving}>
-                    {saving ? <RefreshCw className="icon-small spin" /> : <Check className="icon-small" />}
+                  <button 
+                    type="button"
+                    className="btn primary-btn btn-sm" 
+                    onClick={handleSave} 
+                    disabled={saving}
+                  >
+                    {saving ? <RefreshCw className="icon-xs animate-spin" /> : <Check className="icon-xs" />}
                   </button>
                 </div>
               </div>
             ) : (
               <div className="profile-name-row">
-                <h2>{profile.display_name || 'Workspace User'}</h2>
-                <button className="btn-ghost" onClick={() => setIsEditing(true)}>
-                  <Edit2 className="icon-small" />
+                <h2>{profile.display_name || profile.username || 'Workspace User'}</h2>
+                <button 
+                  type="button"
+                  className="btn-icon text-btn" 
+                  title="Edit Display Name"
+                  onClick={() => setIsEditing(true)}
+                >
+                  <Edit2 className="icon-sm" />
                 </button>
               </div>
             )}
 
-            <span className="profile-email-display">
-              <Mail className="icon-small" />
-              {profile.email}
-            </span>
+            <div className="profile-email-badge">
+              <Mail className="icon-xs" />
+              <span>{profile.email}</span>
+            </div>
 
-            <div className="profile-stats-grid">
-              <div className="profile-stat">
-                <span className="stat-value">{profile.total_queries}</span>
-                <span className="stat-label">Queries</span>
+            {/* Quick Metrics */}
+            <div className="profile-metrics-grid">
+              <div className="metric-box">
+                <Search className="icon metric-icon text-accent" />
+                <span className="metric-num">{profile.total_queries ?? 0}</span>
+                <span className="metric-lbl">Total Queries</span>
               </div>
-              <div className="profile-stat">
-                <span className="stat-value">{profile.total_documents}</span>
-                <span className="stat-label">Documents</span>
+
+              <div className="metric-box">
+                <FileText className="icon metric-icon text-accent" />
+                <span className="metric-num">{profile.total_documents ?? 0}</span>
+                <span className="metric-lbl">Indexed Docs</span>
               </div>
-              <div className="profile-stat">
-                <span className="stat-value">{profile.storage_used_mb} MB</span>
-                <span className="stat-label">Storage</span>
+
+              <div className="metric-box">
+                <Database className="icon metric-icon text-accent" />
+                <span className="metric-num">{profile.storage_used_mb ?? 0} MB</span>
+                <span className="metric-lbl">Vector Storage</span>
               </div>
             </div>
           </div>
 
-          {/* Right: Details & Danger Zone */}
+          {/* Right Column: Account Meta & Danger Zone */}
           <div className="profile-details-stack">
-            <div className="profile-card">
-              <div className="profile-section-header">
-                <Shield className="icon" />
-                <h3>Account Information</h3>
+            {/* Account Details Card */}
+            <div className="glass-panel profile-info-card">
+              <div className="card-header-bar">
+                <Shield className="icon text-accent" />
+                <h3>Account Meta & Session</h3>
               </div>
-              
-              <div className="profile-detail-row">
-                <span className="detail-label">Member Since</span>
-                <span className="detail-value">
-                  <Calendar className="icon-small" />
-                  {new Date(profile.created_at).toLocaleDateString('en-US', {
-                    year: 'numeric', month: 'short', day: 'numeric'
-                  })}
-                </span>
-              </div>
-              
-              <div className="profile-detail-row">
-                <span className="detail-label">Last Login</span>
-                <span className="detail-value">
-                  {profile.last_login 
-                    ? new Date(profile.last_login).toLocaleString()
-                    : '—'
-                  }
-                </span>
-              </div>
-              
-              <div className="profile-detail-row">
-                <span className="detail-label">Plan</span>
-                <span className={`detail-value plan-badge plan-${(profile.plan || 'free').toLowerCase()}`}>
-                  {profile.plan}
-                </span>
-              </div>
-              
-              <div className="profile-detail-row">
-                <span className="detail-label">User ID</span>
-                <span className="detail-value mono">{profile.id}</span>
+
+              <div className="info-rows-list">
+                <div className="info-row">
+                  <span className="info-key">Member Since</span>
+                  <span className="info-val">
+                    <Calendar className="icon-xs" />
+                    {new Date(profile.created_at || Date.now()).toLocaleDateString('en-US', {
+                      year: 'numeric', month: 'short', day: 'numeric'
+                    })}
+                  </span>
+                </div>
+
+                <div className="info-row">
+                  <span className="info-key">Last Login</span>
+                  <span className="info-val">
+                    {profile.last_login 
+                      ? new Date(profile.last_login).toLocaleString()
+                      : 'Active Session'
+                    }
+                  </span>
+                </div>
+
+                <div className="info-row">
+                  <span className="info-key">Current Tier Plan</span>
+                  <span className={`plan-pill plan-${(profile.plan || 'free').toLowerCase()}`}>
+                    {profile.plan || 'Free'}
+                  </span>
+                </div>
+
+                <div className="info-row">
+                  <span className="info-key">Unique User ID</span>
+                  <span className="info-val mono-text">{profile.id}</span>
+                </div>
               </div>
             </div>
 
-            <div className="profile-card danger-zone">
-              <div className="profile-section-header">
+            {/* Danger Zone Card */}
+            <div className="glass-panel danger-zone-card">
+              <div className="card-header-bar text-danger">
                 <AlertTriangle className="icon" />
                 <h3>Danger Zone</h3>
               </div>
-              <p className="danger-text">
-                Once deleted, your account and all associated data cannot be recovered.
+              <p className="danger-zone-desc">
+                Permanently remove your account, clear vector indexes, and purge all uploaded document files from Lexis.
               </p>
               <button 
-                className="btn-danger" 
-                onClick={handleDelete}
-                disabled={deleting}
+                type="button"
+                className="btn danger-btn" 
+                onClick={() => {
+                  setShowDeleteModal(true);
+                  setPassword('');
+                  setConfirmText('');
+                  setDeleteError('');
+                }}
               >
-                {deleting ? <RefreshCw className="icon-small spin" /> : <Trash2 className="icon-small" />}
-                {deleting ? 'Deleting...' : 'Delete Account'}
+                <Trash2 className="icon-sm" />
+                <span>Delete Account & Purge Data</span>
               </button>
             </div>
           </div>
         </div>
 
-        {/* Toast notifications */}
+        {/* Floating Toast Notification */}
         {saveStatus && (
-          <div className={`toast toast-${saveStatus.type}`}>
-            {saveStatus.type === 'success' ? <Check className="icon-small" /> : <AlertTriangle className="icon-small" />}
-            {saveStatus.message}
+          <div className={`settings-toast toast-${saveStatus.type} glass-panel`}>
+            {saveStatus.type === 'success' ? <Check className="icon text-success" /> : <AlertTriangle className="icon text-danger" />}
+            <span>{saveStatus.message}</span>
           </div>
         )}
-      </div>
+      </main>
+
+      {/* Delete Account High-Severity Confirmation Modal */}
+      {showDeleteModal && (
+        <div 
+          className="modal-backdrop"
+          onClick={() => !deleting && setShowDeleteModal(false)}
+        >
+          <div 
+            className="modal-card modal-card-danger glass-panel"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyBetween: 'space-between', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <AlertTriangle className="icon-lg text-danger" />
+                <div>
+                  <h3 style={{ fontSize: '18px', fontWeight: '700', color: '#ef4444' }}>PERMANENT ACCOUNT DELETION</h3>
+                  <p className="info-key" style={{ fontSize: '12px', color: '#fca5a5' }}>This action is irreversible and permanent.</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => !deleting && setShowDeleteModal(false)}
+                className="btn-icon text-btn"
+                disabled={deleting}
+                style={{ marginLeft: 'auto' }}
+              >
+                <X className="icon-sm" />
+              </button>
+            </div>
+
+            <div className="glass-panel" style={{ padding: '12px 16px', background: 'rgba(239, 68, 68, 0.08)', borderColor: 'rgba(239, 68, 68, 0.2)' }}>
+              <p style={{ fontSize: '12px', fontWeight: '600', color: '#fca5a5', marginBottom: '6px' }}>
+                The following resources will be permanently purged:
+              </p>
+              <ul style={{ paddingLeft: '18px', fontSize: '12px', color: 'var(--color-body)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <li>All uploaded PDF/DOCX files from Tigris/S3 object storage</li>
+                <li>All vector embeddings & local search indices</li>
+                <li>All chat sessions, message histories, and inline citations</li>
+                <li>Your profile credentials, avatar, and settings preferences</li>
+              </ul>
+            </div>
+
+            {deleteError && (
+              <div className="auth-error-banner" role="alert">
+                <AlertTriangle className="icon-sm text-danger" />
+                <span>{deleteError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmDelete} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Password Input */}
+              <div className="auth-input-group">
+                <label className="auth-field-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Lock className="icon-xs" />
+                  <span>ENTER PASSWORD TO CONFIRM</span>
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Your account password"
+                  required
+                  disabled={deleting}
+                  className="auth-text-input"
+                />
+              </div>
+
+              {/* Confirmation Text Input */}
+              <div className="auth-input-group">
+                <label className="auth-field-label">
+                  TYPE <span style={{ color: '#ef4444', fontFamily: 'var(--font-mono)' }}>DELETE MY ACCOUNT</span> BELOW
+                </label>
+                <input
+                  type="text"
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  placeholder="DELETE MY ACCOUNT"
+                  required
+                  disabled={deleting}
+                  className="auth-text-input"
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteModal(false)}
+                  disabled={deleting}
+                  className="btn outline-btn"
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={deleting || !password || confirmText.trim() !== 'DELETE MY ACCOUNT'}
+                  className="btn danger-btn"
+                  style={{ flex: 2 }}
+                >
+                  {deleting ? (
+                    <>
+                      <RefreshCw className="icon-xs animate-spin" />
+                      <span>Purging Account & Data...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="icon-xs" />
+                      <span>Permanently Delete Everything</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -30,6 +30,7 @@ class MessageCreate(MessageBase):
 class MessageSubmit(BaseModel):
     content: str = Field(..., min_length=1)
     provider: str | None = Field(None, max_length=50)
+    web_search: bool = Field(False, description="Enable Tavily web search to supplement RAG context")
 
 class MessageResponse(MessageBase):
     id: uuid.UUID

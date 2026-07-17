@@ -17,4 +17,6 @@ alembic
 email-validator
 pypdf
 llama-index-readers-file
+tavily-python
+redis>=5.0.0
 

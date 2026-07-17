@@ -239,20 +239,103 @@ def build_prompt(query: str, nodes: list) -> str:
     return system_prompt.format(context=context_str.strip(), query=query)
 
 
+def build_prompt_with_web(query: str, doc_nodes: list | None, web_results: list[dict]) -> str:
+    """
+    Builds a combined prompt with both document context and web search results.
+    Adapts the system instructions based on which source types are present.
+    """
+    has_docs = doc_nodes and len(doc_nodes) > 0
+    has_web = web_results and len(web_results) > 0
+
+    # Build citation instructions based on available sources
+    citation_instructions = ""
+    if has_docs and has_web:
+        citation_instructions = (
+            "4. CITATIONS: For document-sourced claims, attach `[Page X]` (where X is page number). "
+            "For web-sourced claims, attach `[Web N: Title](url)` (where N is web source number 1..N, Title is brief title, url is the web link). "
+            "Always attribute each fact directly to its source.\n"
+        )
+    elif has_docs:
+        citation_instructions = (
+            "4. CITATIONS: For every claim or detail retrieved, attach an inline citation tag "
+            "using the exact syntax `[Page X]`.\n"
+        )
+    elif has_web:
+        citation_instructions = (
+            "4. CITATIONS: For every web-sourced claim, attach `[Web N: Title](url)` (where N is web source number 1..N, Title is brief title, url is the web link). "
+            "Always attribute each fact directly to its source.\n"
+        )
+
+    truthfulness = (
+        "5. TRUTHFULNESS: Base your answers on the provided context below. "
+        "If the context does not contain the answer, answer using general knowledge while noting limitations.\n"
+    )
+
+    system_prompt = (
+        "You are Lexis, an expert precision retrieval assistant.\n\n"
+        "Core Response Guidelines:\n"
+        "1. ADAPTIVE DEPTH: Analyze the user query. If it's brief/direct, provide a concise 1-2 sentence response. "
+        "If it's complex or broad, provide a detailed response with section subheadings and bullet points.\n"
+        "2. FORMATTING: Use clean Markdown formatting (e.g. `### Section`, `**bold key terms**`, bullet lists). "
+        "Do NOT include robotic preamble phrases. Answer directly.\n"
+        "3. TYPO CORRECTION: Clean up document hyphenation artifacts or OCR errors.\n"
+        + citation_instructions
+        + truthfulness
+    )
+
+    # Build document context block
+    context_parts = []
+    if has_docs:
+        context_parts.append("[Document Sources]")
+        for i, node in enumerate(doc_nodes):
+            metadata = node.node.metadata or {}
+            page_num = metadata.get("page_label", metadata.get("page_num", "unknown"))
+            file_name = metadata.get("file_name", "document")
+            context_parts.append(f"--- Chunk {i+1} (Source: {file_name}, Page: {page_num}) ---")
+            context_parts.append(node.node.text.strip())
+            context_parts.append("")
+
+    # Build web context block
+    if has_web:
+        context_parts.append("[Web Sources]")
+        for i, result in enumerate(web_results):
+            title = result.get("title", "Untitled")
+            url = result.get("url", "")
+            content = result.get("content", "")
+            context_parts.append(f"--- Web {i+1}: {title} ({url}) ---")
+            context_parts.append(content.strip())
+            context_parts.append("")
+
+    if not has_docs and not has_web:
+        context_parts.append("(No external document or web context retrieved. Rely on general AI knowledge.)")
+
+    context_str = "\n".join(context_parts).strip()
+
+    full_prompt = (
+        system_prompt + "\n\n"
+        "Retrieved Context:\n" + context_str + "\n\n"
+        "User Inquiry: " + query
+    )
+
+    return full_prompt
+
+
 async def query(
     chat_id: str | uuid.UUID,
     user_message: str,
     provider: str,
-    db: AsyncSession
+    db: AsyncSession,
+    web_search_enabled: bool = False
 ) -> AsyncGenerator[str, None]:
     """
-    Executes a RAG query query pipeline:
-    1. Loads the VectorStoreIndex for the chat's document.
-    2. Retrieves context chunks.
-    3. Builds the prompt.
-    4. Streams tokens from selected provider with retry logic.
-    5. Deduplicates citations and yields a 'done' SSE event.
-    6. Persists the user and assistant messages to database atomically.
+    Executes a RAG query pipeline:
+    1. Loads the VectorStoreIndex for the chat's document (if present).
+    2. Retrieves context chunks from local index.
+    3. Optionally runs Tavily web search in parallel with graceful fallback.
+    4. Builds the prompt (doc-only, web-only, or combined).
+    5. Streams tokens from selected provider with retry logic.
+    6. Deduplicates citations and yields a 'done' SSE event with web_sources and system_warning.
+    7. Persists the user and assistant messages to database atomically.
     """
     import asyncio
     import json
@@ -272,29 +355,63 @@ async def query(
         yield f"data: {json.dumps({'type': 'error', 'code': 'CHAT_NOT_FOUND', 'message': 'Chat session not found'})}\n\n"
         return
 
-    if not chat.current_doc_id:
+    # Document requirement check — bypassed when web search is enabled
+    if not chat.current_doc_id and not web_search_enabled:
         yield f"data: {json.dumps({'type': 'error', 'code': 'NO_DOCUMENT_ASSOCIATED', 'message': 'No document is associated with this chat'})}\n\n"
         return
 
-    # 2. Retrieve chunks (up to 5)
-    try:
-        nodes = retrieve_context(chat.user_id, chat.current_doc_id, user_message, top_k=5)
-    except ValueError as val_err:
-        if str(val_err) == "NO_CONTENT_RETRIEVED":
-            yield f"data: {json.dumps({'type': 'error', 'code': 'NO_CONTENT_RETRIEVED', 'message': 'No relevant context found'})}\n\n"
-            return
-        else:
-            yield f"data: {json.dumps({'type': 'error', 'code': 'RETRIEVAL_ERROR', 'message': str(val_err)})}\n\n"
-            return
-    except Exception as exc:
-        yield f"data: {json.dumps({'type': 'error', 'code': 'RETRIEVAL_ERROR', 'message': str(exc)})}\n\n"
-        return
+    # 2. Retrieve document chunks (if a document is attached)
+    nodes = None
+    if chat.current_doc_id:
+        try:
+            nodes = retrieve_context(chat.user_id, chat.current_doc_id, user_message, top_k=5)
+        except ValueError as val_err:
+            if str(val_err) == "NO_CONTENT_RETRIEVED":
+                nodes = None  # No doc results — acceptable
+                if not web_search_enabled:
+                    yield f"data: {json.dumps({'type': 'error', 'code': 'NO_CONTENT_RETRIEVED', 'message': 'No relevant context found in document'})}\n\n"
+                    return
+            else:
+                if not web_search_enabled:
+                    yield f"data: {json.dumps({'type': 'error', 'code': 'RETRIEVAL_ERROR', 'message': str(val_err)})}\n\n"
+                    return
+                nodes = None
+        except Exception as exc:
+            if not web_search_enabled:
+                yield f"data: {json.dumps({'type': 'error', 'code': 'RETRIEVAL_ERROR', 'message': str(exc)})}\n\n"
+                return
+            else:
+                logger.warning(f"Document retrieval failed but web search enabled, continuing: {exc}")
+                nodes = None
 
-    # 3. Build prompt
-    prompt = build_prompt(user_message, nodes)
+    # 3. Run web search if enabled
+    web_results = []
+    system_warning = None
+    if web_search_enabled:
+        try:
+            from app.rag.web_search import search_web
+            web_results, system_warning = search_web(user_message)
+        except Exception as web_err:
+            logger.warning(f"Web search failed, continuing with local RAG / LLM: {web_err}")
+            web_results = []
+            system_warning = "Web search service unavailable"
 
-    # 4. Stream LLM tokens
+    # Emit web search status event so frontend knows search completed (or failed)
+    if web_search_enabled:
+        status_event = {'type': 'web_search_status', 'count': len(web_results)}
+        if system_warning:
+            status_event['warning'] = system_warning
+        yield f"data: {json.dumps(status_event)}\n\n"
+
+    # 4. Build prompt
+    if web_results or web_search_enabled:
+        prompt = build_prompt_with_web(user_message, nodes, web_results)
+    else:
+        prompt = build_prompt(user_message, nodes)
+
+    # 5. Stream LLM tokens
     from app.rag.providers import stream_gemini, stream_groq, LLMUnavailableError
+    from app.core.circuit_breaker import CircuitBreakerOpenException
     full_response = ""
     try:
         if provider == "gemini":
@@ -309,6 +426,9 @@ async def query(
             full_response += token
             yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
 
+    except CircuitBreakerOpenException as cbe:
+        yield f"data: {json.dumps({'type': 'error', 'code': 'CIRCUIT_OPEN', 'message': cbe.message})}\n\n"
+        return
     except LLMUnavailableError as err:
         yield f"data: {json.dumps({'type': 'error', 'code': 'PROVIDER_UNAVAILABLE', 'message': str(err)})}\n\n"
         return
@@ -316,49 +436,61 @@ async def query(
         yield f"data: {json.dumps({'type': 'error', 'code': 'LLM_ERROR', 'message': str(exc)})}\n\n"
         return
 
-    # 5. Extract full verbatim citations per page/node
+    # 6. Extract document citations (only for doc-sourced nodes)
     grouped_citations_data = []
-    seen_page_keys = set()
+    if nodes:
+        seen_page_keys = set()
+        for node in nodes:
+            metadata = node.node.metadata or {}
+            doc_filename = metadata.get("file_name", "document")
+            page_num = metadata.get("page_label", metadata.get("page_num", None))
+            if page_num is not None:
+                try:
+                    page_num = int(page_num)
+                except ValueError:
+                    page_num = None
 
-    for node in nodes:
-        metadata = node.node.metadata or {}
-        doc_filename = metadata.get("file_name", "document")
-        page_num = metadata.get("page_label", metadata.get("page_num", None))
-        if page_num is not None:
-            try:
-                page_num = int(page_num)
-            except ValueError:
-                page_num = None
+            full_text = node.node.text.strip()
+            doc_id = chat.current_doc_id
 
-        full_text = node.node.text.strip()
-        doc_id = chat.current_doc_id
+            page_key = (str(doc_id), page_num)
+            if page_key in seen_page_keys:
+                for c_item in grouped_citations_data:
+                    if c_item["document_id"] == str(doc_id) and c_item["page_number"] == page_num:
+                        if full_text not in c_item["excerpt"]:
+                            c_item["excerpt"] += "\n\n" + full_text
+                        break
+            else:
+                seen_page_keys.add(page_key)
+                grouped_citations_data.append({
+                    "document_id": str(doc_id),
+                    "excerpt": full_text,
+                    "page_number": page_num,
+                    "doc_filename": doc_filename
+                })
 
-        page_key = (str(doc_id), page_num)
-        if page_key in seen_page_keys:
-            for c_item in grouped_citations_data:
-                if c_item["document_id"] == str(doc_id) and c_item["page_number"] == page_num:
-                    if full_text not in c_item["excerpt"]:
-                        c_item["excerpt"] += "\n\n" + full_text
-                    break
-        else:
-            seen_page_keys.add(page_key)
-            grouped_citations_data.append({
-                "document_id": str(doc_id),
-                "excerpt": full_text,
-                "page_number": page_num,
-                "doc_filename": doc_filename
-            })
+    # Build ephemeral web_sources payload (not persisted to DB)
+    web_sources_data = []
+    for r in web_results:
+        web_sources_data.append({
+            "title": r.get("title", "Untitled"),
+            "url": r.get("url", ""),
+            "snippet": (r.get("content", "")[:200] + "...") if len(r.get("content", "")) > 200 else r.get("content", "")
+        })
 
-    # 6. Save messages to NeonDB atomically BEFORE yielding done event
+    # 7. Save messages to NeonDB atomically BEFORE yielding done event
     try:
+        from datetime import timedelta
+        now_time = datetime.now(timezone.utc)
         user_msg = Message(
             id=uuid.uuid4(),
             chat_id=chat.id,
             user_id=chat.user_id,
             role="user",
             content=user_message,
-            provider=provider,
-            doc_id=chat.current_doc_id
+            provider=None,
+            doc_id=chat.current_doc_id,
+            created_at=now_time - timedelta(milliseconds=50)
         )
         assistant_msg = Message(
             id=uuid.uuid4(),
@@ -367,24 +499,41 @@ async def query(
             role="assistant",
             content=full_response,
             provider=provider,
-            doc_id=chat.current_doc_id
+            doc_id=chat.current_doc_id,
+            created_at=now_time
         )
         db.add(user_msg)
         db.add(assistant_msg)
         await db.flush()
 
-        for c_data in grouped_citations_data:
-            citation_obj = Citation(
-                id=uuid.uuid4(),
-                message_id=assistant_msg.id,
-                document_id=uuid.UUID(c_data["document_id"]),
-                excerpt=c_data["excerpt"],
-                page_number=c_data["page_number"]
-            )
-            db.add(citation_obj)
-        
+        # Bulk insert document citations via PostgreSQL Core (web sources are ephemeral)
+        if grouped_citations_data:
+            citation_values = [
+                {
+                    "id": uuid.uuid4(),
+                    "message_id": assistant_msg.id,
+                    "document_id": uuid.UUID(c_data["document_id"]),
+                    "excerpt": c_data["excerpt"],
+                    "page_number": c_data["page_number"]
+                }
+                for c_data in grouped_citations_data
+            ]
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+            BATCH_SIZE = 500
+            for i in range(0, len(citation_values), BATCH_SIZE):
+                chunk = citation_values[i:i + BATCH_SIZE]
+                stmt = pg_insert(Citation).values(chunk)
+                await db.execute(stmt)
+
         chat.last_provider = provider
         await db.commit()
+        try:
+            from app.cache import cache
+            await cache.delete_pattern(f"chat:{chat_id}:messages:*")
+            await cache.delete(f"chat:{chat_id}:meta")
+            await cache.delete_pattern(f"user:{chat.user_id}:chats:*")
+        except Exception:
+            pass
     except asyncio.CancelledError:
         logger.info("SSE connection cancelled. Rolling back transaction.")
         await db.rollback()
@@ -394,8 +543,17 @@ async def query(
         await db.rollback()
         raise
 
-    # 7. Yield done chunk with citations AFTER commit is guaranteed
-    yield f"data: {json.dumps({'type': 'done', 'citations': grouped_citations_data})}\n\n"
+    # 8. Yield done chunk with citations AND web_sources AFTER commit is guaranteed
+    done_payload = {
+        'type': 'done',
+        'citations': grouped_citations_data,
+        'message_id': str(assistant_msg.id)
+    }
+    if web_sources_data:
+        done_payload['web_sources'] = web_sources_data
+    if system_warning:
+        done_payload['system_warning'] = system_warning
+    yield f"data: {json.dumps(done_payload)}\n\n"
 
 
 async def query_unified(
@@ -513,6 +671,7 @@ async def query_unified(
 
     # 5. Stream LLM tokens
     from app.rag.providers import stream_gemini, stream_groq, LLMUnavailableError
+    from app.core.circuit_breaker import CircuitBreakerOpenException
     full_response = ""
     try:
         if provider == "gemini":
@@ -527,6 +686,9 @@ async def query_unified(
             full_response += token
             yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
 
+    except CircuitBreakerOpenException as cbe:
+        yield f"data: {json.dumps({'type': 'error', 'code': 'CIRCUIT_OPEN', 'message': cbe.message})}\n\n"
+        return
     except LLMUnavailableError as err:
         yield f"data: {json.dumps({'type': 'error', 'code': 'PROVIDER_UNAVAILABLE', 'message': str(err)})}\n\n"
         return
@@ -572,14 +734,17 @@ async def query_unified(
 
     # 7. Save messages to NeonDB atomically BEFORE yielding done event
     try:
+        from datetime import timedelta
+        now_time = datetime.now(timezone.utc)
         user_msg = Message(
             id=uuid.uuid4(),
             chat_id=unified_chat.id,
             user_id=unified_chat.user_id,
             role="user",
             content=user_message,
-            provider=provider,
-            doc_id=None
+            provider=None,
+            doc_id=None,
+            created_at=now_time - timedelta(milliseconds=50)
         )
         assistant_msg = Message(
             id=uuid.uuid4(),
@@ -588,21 +753,31 @@ async def query_unified(
             role="assistant",
             content=full_response,
             provider=provider,
-            doc_id=None
+            doc_id=None,
+            created_at=now_time
         )
         db.add(user_msg)
         db.add(assistant_msg)
         await db.flush()
 
-        for c_data in grouped_citations_data:
-            citation_obj = Citation(
-                id=uuid.uuid4(),
-                message_id=assistant_msg.id,
-                document_id=uuid.UUID(c_data["document_id"]),
-                excerpt=c_data["excerpt"],
-                page_number=c_data["page_number"]
-            )
-            db.add(citation_obj)
+        # Bulk insert document citations via PostgreSQL Core
+        if grouped_citations_data:
+            citation_values = [
+                {
+                    "id": uuid.uuid4(),
+                    "message_id": assistant_msg.id,
+                    "document_id": uuid.UUID(c_data["document_id"]),
+                    "excerpt": c_data["excerpt"],
+                    "page_number": c_data["page_number"]
+                }
+                for c_data in grouped_citations_data
+            ]
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+            BATCH_SIZE = 500
+            for i in range(0, len(citation_values), BATCH_SIZE):
+                chunk = citation_values[i:i + BATCH_SIZE]
+                stmt = pg_insert(Citation).values(chunk)
+                await db.execute(stmt)
         
         unified_chat.last_provider = provider
         await db.commit()
@@ -616,5 +791,308 @@ async def query_unified(
         raise
 
     # 8. Yield done chunk with citations AFTER commit is guaranteed
-    yield f"data: {json.dumps({'type': 'done', 'citations': grouped_citations_data})}\n\n"
+    done_payload = {
+        'type': 'done',
+        'citations': grouped_citations_data,
+        'message_id': str(assistant_msg.id)
+    }
+    yield f"data: {json.dumps(done_payload)}\n\n"
 
+
+async def query_workspace(
+    workspace_id: str | uuid.UUID,
+    workspace_chat_id: str | uuid.UUID,
+    user_message: str,
+    provider: str,
+    db: AsyncSession
+) -> AsyncGenerator[str, None]:
+    """
+    Executes a workspace-scoped RAG query pipeline:
+    1. Fetches all member chats and their associated documents.
+    2. Parallel retrieves up to 5 chunks from each document via asyncio.gather.
+    3. Fetches last 10 messages from each member chat + workspace chat as context.
+    4. Builds a workspace-aware prompt with source attribution.
+    5. Streams LLM tokens and persists messages with cross-document citations.
+    """
+    import asyncio
+    import json
+    import uuid as uuid_mod
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from app.models.workspace import Workspace, WorkspaceChat as WorkspaceChatModel, WorkspaceChatMetadata
+    from app.models.chat import Chat
+    from app.models.document import Document
+    from app.models.message import Message
+    from app.models.citation import Citation
+
+    HISTORY_WINDOW = 10
+
+    # 1. Fetch workspace and verify
+    ws_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+    workspace = ws_result.scalars().first()
+    if not workspace:
+        yield f"data: {json.dumps({'type': 'error', 'code': 'WORKSPACE_NOT_FOUND', 'message': 'Workspace not found'})}\n\n"
+        return
+
+    # 2. Fetch member chats
+    members_result = await db.execute(
+        select(Chat)
+        .join(WorkspaceChatModel, WorkspaceChatModel.chat_id == Chat.id)
+        .where(WorkspaceChatModel.workspace_id == workspace_id)
+    )
+    member_chats = members_result.scalars().all()
+
+    # 3. Collect active documents from member chats
+    doc_ids = [c.current_doc_id for c in member_chats if c.current_doc_id is not None]
+    chat_doc_map = {}
+    for c in member_chats:
+        if c.current_doc_id:
+            chat_doc_map[str(c.current_doc_id)] = c.title
+
+    active_docs = []
+    if doc_ids:
+        docs_result = await db.execute(select(Document).where(Document.id.in_(doc_ids)))
+        documents = docs_result.scalars().all()
+        now_utc = datetime.now(timezone.utc)
+        for doc in documents:
+            exp = doc.expiry_at
+            if exp and exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            if doc.status != "expired" and (exp is None or exp > now_utc):
+                active_docs.append(doc)
+
+    # 4. Parallel document retrieval via asyncio
+    all_nodes = []
+    if active_docs:
+        async def _retrieve_doc(doc):
+            try:
+                import asyncio as _aio
+                loop = _aio.get_event_loop()
+                nodes = await loop.run_in_executor(
+                    None, retrieve_context, workspace.user_id, doc.id, user_message, 5
+                )
+                for node in nodes:
+                    node.node.metadata["document_id"] = str(doc.id)
+                    node.node.metadata["file_name"] = doc.filename
+                    node.node.metadata["source_chat"] = chat_doc_map.get(str(doc.id), "Unknown Chat")
+                return nodes
+            except ValueError as ve:
+                if str(ve) == "NO_CONTENT_RETRIEVED":
+                    return []
+                return []
+            except Exception:
+                return []
+
+        results = await asyncio.gather(*[_retrieve_doc(doc) for doc in active_docs])
+        for node_list in results:
+            all_nodes.extend(node_list)
+
+    # Deduplicate and rank
+    seen_texts = set()
+    unique_nodes = []
+    for node in all_nodes:
+        text_content = node.node.text.strip()
+        if text_content not in seen_texts:
+            seen_texts.add(text_content)
+            unique_nodes.append(node)
+    unique_nodes.sort(key=lambda x: x.score or 0.0, reverse=True)
+    top_nodes = unique_nodes[:8]
+
+    # 5. Fetch recent chat history window (last 10 messages per chat)
+    history_context = ""
+    all_history_chats = list(member_chats)
+
+    # Add workspace chat itself
+    ws_chat_result = await db.execute(select(Chat).where(Chat.id == workspace_chat_id))
+    ws_chat = ws_chat_result.scalars().first()
+    if ws_chat:
+        all_history_chats.append(ws_chat)
+
+    for chat in all_history_chats:
+        msgs_result = await db.execute(
+            select(Message)
+            .where(Message.chat_id == chat.id)
+            .order_by(Message.created_at.desc())
+            .limit(HISTORY_WINDOW)
+        )
+        recent_msgs = list(reversed(msgs_result.scalars().all()))
+        if recent_msgs:
+            label = "Workspace Chat" if chat.id == workspace_chat_id else chat.title
+            history_context += f"\n[Chat: {label} — Recent History]\n"
+            for msg in recent_msgs:
+                role_label = "User" if msg.role == "user" else "Assistant"
+                truncated = msg.content[:500] if len(msg.content) > 500 else msg.content
+                history_context += f"{role_label}: {truncated}\n"
+
+    # 6. Build workspace-aware prompt
+    if not top_nodes and not history_context.strip():
+        yield f"data: {json.dumps({'type': 'error', 'code': 'NO_CONTENT_RETRIEVED', 'message': 'No documents or history available in this workspace.'})}\n\n"
+        return
+
+    doc_context = ""
+    for i, node in enumerate(top_nodes):
+        metadata = node.node.metadata or {}
+        page_num = metadata.get("page_label", metadata.get("page_num", "unknown"))
+        file_name = metadata.get("file_name", "document")
+        source_chat = metadata.get("source_chat", "Unknown")
+        doc_context += f"--- Chunk {i+1} (Doc: {file_name} • Chat: {source_chat}, Page: {page_num}) ---\n"
+        doc_context += node.node.text.strip() + "\n\n"
+
+    system_prompt = (
+        "You are Lexis Workspace Assistant — an expert cross-document retrieval assistant.\n\n"
+        "You have access to multiple documents and conversation histories from this workspace.\n\n"
+        "Core Response Guidelines:\n"
+        "1. ADAPTIVE DEPTH: If the query is direct, answer concisely. If complex, provide detailed analysis.\n"
+        "2. FORMATTING: Use clean Markdown. No robotic preamble.\n"
+        "3. CROSS-DOCUMENT SYNTHESIS: When information spans multiple documents, synthesize and compare.\n"
+        "4. CITATIONS: Attach inline `[Page X]` citations. When citing across documents, specify the source: `[Doc: filename.pdf, Page X]`.\n"
+        "5. TRUTHFULNESS: Base answers ONLY on provided context. State clearly if information is not found.\n\n"
+    )
+
+    if doc_context.strip():
+        system_prompt += f"Retrieved Document Context:\n{doc_context.strip()}\n\n"
+    if history_context.strip():
+        system_prompt += f"Relevant Conversation History:\n{history_context.strip()}\n\n"
+
+    prompt = system_prompt + f"User Inquiry: {user_message}"
+
+    # 7. Stream LLM tokens
+    from app.rag.providers import stream_gemini, stream_groq, LLMUnavailableError
+    from app.core.circuit_breaker import CircuitBreakerOpenException
+
+    full_response = ""
+    try:
+        if provider == "gemini":
+            stream_gen = stream_gemini(prompt)
+        elif provider == "groq":
+            stream_gen = stream_groq(prompt)
+        else:
+            yield f"data: {json.dumps({'type': 'error', 'code': 'INVALID_PROVIDER', 'message': f'Unsupported provider: {provider}'})}\n\n"
+            return
+
+        async for token in stream_gen:
+            full_response += token
+            yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+
+    except CircuitBreakerOpenException as cbe:
+        yield f"data: {json.dumps({'type': 'error', 'code': 'CIRCUIT_OPEN', 'message': cbe.message})}\n\n"
+        return
+    except LLMUnavailableError as err:
+        yield f"data: {json.dumps({'type': 'error', 'code': 'PROVIDER_UNAVAILABLE', 'message': str(err)})}\n\n"
+        return
+    except Exception as exc:
+        yield f"data: {json.dumps({'type': 'error', 'code': 'LLM_ERROR', 'message': str(exc)})}\n\n"
+        return
+
+    # 8. Extract citations with source attribution
+    grouped_citations_data = []
+    seen_page_keys = set()
+
+    for node in top_nodes:
+        metadata = node.node.metadata or {}
+        doc_filename = metadata.get("file_name", "document")
+        doc_id_str = metadata.get("document_id")
+        source_chat = metadata.get("source_chat", "Unknown")
+        if not doc_id_str:
+            continue
+
+        page_num = metadata.get("page_label", metadata.get("page_num", None))
+        if page_num is not None:
+            try:
+                page_num = int(page_num)
+            except ValueError:
+                page_num = None
+
+        full_text = node.node.text.strip()
+        page_key = (doc_id_str, page_num)
+
+        if page_key in seen_page_keys:
+            for c_item in grouped_citations_data:
+                if c_item["document_id"] == doc_id_str and c_item["page_number"] == page_num:
+                    if full_text not in c_item["excerpt"]:
+                        c_item["excerpt"] += "\n\n" + full_text
+                    break
+        else:
+            seen_page_keys.add(page_key)
+            grouped_citations_data.append({
+                "document_id": doc_id_str,
+                "excerpt": full_text,
+                "page_number": page_num,
+                "doc_filename": doc_filename,
+                "source_chat": source_chat
+            })
+
+    # 9. Persist messages atomically
+    try:
+        from datetime import timedelta
+        now_time = datetime.now(timezone.utc)
+        user_msg = Message(
+            id=uuid_mod.uuid4(),
+            chat_id=workspace_chat_id,
+            user_id=workspace.user_id,
+            role="user",
+            content=user_message,
+            provider=None,
+            doc_id=None,
+            created_at=now_time - timedelta(milliseconds=50)
+        )
+        assistant_msg = Message(
+            id=uuid_mod.uuid4(),
+            chat_id=workspace_chat_id,
+            user_id=workspace.user_id,
+            role="assistant",
+            content=full_response,
+            provider=provider,
+            doc_id=None,
+            created_at=now_time
+        )
+        db.add(user_msg)
+        db.add(assistant_msg)
+        await db.flush()
+
+        if grouped_citations_data:
+            citation_values = [
+                {
+                    "id": uuid_mod.uuid4(),
+                    "message_id": assistant_msg.id,
+                    "document_id": uuid_mod.UUID(c_data["document_id"]),
+                    "excerpt": c_data["excerpt"],
+                    "page_number": c_data["page_number"]
+                }
+                for c_data in grouped_citations_data
+            ]
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+            BATCH_SIZE = 500
+            for i in range(0, len(citation_values), BATCH_SIZE):
+                chunk = citation_values[i:i + BATCH_SIZE]
+                stmt = pg_insert(Citation).values(chunk)
+                await db.execute(stmt)
+
+        # Update workspace chat's last_provider
+        if ws_chat:
+            ws_chat.last_provider = provider
+
+        await db.commit()
+        try:
+            from app.cache import cache
+            await cache.delete_pattern(f"chat:{workspace_chat_id}:messages:*")
+            await cache.delete(f"chat:{workspace_chat_id}:meta")
+            await cache.delete_pattern(f"user:{workspace.user_id}:chats:*")
+        except Exception:
+            pass
+    except asyncio.CancelledError:
+        logger.info("SSE connection cancelled. Rolling back transaction.")
+        await db.rollback()
+        raise
+    except Exception as db_exc:
+        logger.error(f"Error persisting workspace conversation to database: {db_exc}")
+        await db.rollback()
+        raise
+
+    # 10. Yield done event with citations
+    done_payload = {
+        'type': 'done',
+        'citations': grouped_citations_data,
+        'message_id': str(assistant_msg.id)
+    }
+    yield f"data: {json.dumps(done_payload)}\n\n"

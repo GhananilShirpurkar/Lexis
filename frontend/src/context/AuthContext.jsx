@@ -60,8 +60,9 @@ export const AuthProvider = ({ children }) => {
 
   const refreshUser = async () => {
     try {
-      const res = await apiClient.get('/users/me');
+      const res = await apiClient.get('/auth/me');
       setUser(res.data);
+      return res.data;
     } catch (err) {
       console.error('Failed to refresh user:', err);
     }

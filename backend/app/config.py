@@ -2,6 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/lexis"
+    REDIS_URL: str = "redis://localhost:6379/0"
     
     # JWT Auth Configuration (Task 1.7.1 placeholders)
     JWT_SECRET: str = "development_secret_key_to_be_replaced_in_production_environments"
@@ -19,6 +20,12 @@ class Settings(BaseSettings):
     # LLM API configuration options
     GEMINI_API_KEY: str = ""
     GROQ_API_KEY: str = ""
+
+    # Tavily Web Search configuration
+    TAVILY_API_KEY: str = ""
+    TAVILY_MAX_RESULTS: int = 3
+    TAVILY_SEARCH_DEPTH: str = "basic"
+    TAVILY_TOKEN_CAP: int = 1500
 
     # Rate Limiting configuration options
     RATE_LIMIT_LOGIN_IP_LIMIT: int = 20

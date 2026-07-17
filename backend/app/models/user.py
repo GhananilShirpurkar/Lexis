@@ -16,6 +16,11 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(254), unique=True, index=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    username: Mapped[Optional[str]] = mapped_column(String(30), unique=True, index=True, nullable=True)
+    avatar_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    role: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    onboarding_completed: Mapped[bool] = mapped_column(default=False, server_default="false")
+    onboarding_skipped_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -35,4 +40,7 @@ class User(Base):
     )
     notifications: Mapped[list["Notification"]] = relationship(
         "Notification", back_populates="user", cascade="all, delete-orphan"
+    )
+    workspaces: Mapped[list["Workspace"]] = relationship(
+        "Workspace", back_populates="user", cascade="all, delete-orphan"
     )

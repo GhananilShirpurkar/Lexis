@@ -14,6 +14,7 @@ from app.storage.r2_client import upload_file, delete_file, get_file_content
 from app.rag.pipeline import index_document
 from app.schemas.document import DocumentResponse, DocumentUpdate
 from app.config import settings
+from app.core.caching import invalidate_public_library
 
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
@@ -167,6 +168,8 @@ async def upload_document(
 
         raise db_exc
 
+    invalidate_public_library()
+
     return {
         "id": doc_id,
         "user_id": user_id,
@@ -269,6 +272,7 @@ async def delete_document(
         except Exception:
             pass
 
+    invalidate_public_library()
     return
 
 
@@ -281,6 +285,8 @@ async def delete_document(
 )
 async def list_documents(
     request: Request,
+    limit: int = 50,
+    offset: int = 0,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -292,6 +298,8 @@ async def list_documents(
         select(Document)
         .where(Document.user_id == user_id)
         .order_by(Document.uploaded_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
     result = await db.execute(query)
     documents = result.scalars().all()

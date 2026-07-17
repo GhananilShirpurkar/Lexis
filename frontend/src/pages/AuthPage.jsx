@@ -173,6 +173,14 @@ const AuthPage = () => {
             </p>
           </div>
 
+          {/* Info message banner (e.g. account deletion) */}
+          {location.state?.message && !serverError && (
+            <div className="auth-error-banner" style={{ background: 'rgba(16, 185, 129, 0.1)', borderColor: 'rgba(16, 185, 129, 0.3)', color: '#10B981' }} role="status">
+              <span className="auth-error-icon">✅</span>
+              <span className="auth-error-text">{location.state.message}</span>
+            </div>
+          )}
+
           {/* Modern Toast Error Banner */}
           {serverError && (
             <div className="auth-error-banner" role="alert">

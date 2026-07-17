@@ -74,7 +74,9 @@ def upload_file(
     if isinstance(client, MagicMock):
         return key
 
-    try:
+    from app.core.circuit_breaker import storage_breaker, CircuitBreakerOpenException
+
+    def _do_upload():
         # Check if bucket exists, create if missing
         try:
             client.head_bucket(Bucket=settings.S3_BUCKET_NAME)
@@ -93,8 +95,28 @@ def upload_file(
             Body=data,
             ContentType=content_type
         )
+
+    try:
+        import time
+        now = time.time()
+        if storage_breaker.state == "OPEN":
+            if now - storage_breaker.last_state_change > storage_breaker.recovery_timeout:
+                storage_breaker.state = "HALF-OPEN"
+                storage_breaker.last_state_change = now
+            else:
+                raise CircuitBreakerOpenException("tigris_storage", "Storage service temporarily unavailable.")
+        
+        _do_upload()
+        storage_breaker._record_success()
+    except CircuitBreakerOpenException as cbo:
+        logger.error(f"Tigris Storage Circuit Breaker OPEN: {cbo}")
+        raise cbo
     except ClientError as e:
+        storage_breaker._record_failure(e)
         logger.error(f"Failed to upload file {key} to Tigris (Bucket: '{settings.S3_BUCKET_NAME}', Endpoint: '{settings.ENDPOINT_URL_S3}'): {e}")
+        raise e
+    except Exception as e:
+        storage_breaker._record_failure(e)
         raise e
 
     return key
@@ -109,14 +131,33 @@ def delete_file(r2_key: str) -> None:
     if isinstance(client, MagicMock):
         return
 
-    try:
+    from app.core.circuit_breaker import storage_breaker, CircuitBreakerOpenException
+
+    def _do_delete():
         client.delete_object(
             Bucket=settings.S3_BUCKET_NAME,
             Key=r2_key
         )
+
+    try:
+        import time
+        now = time.time()
+        if storage_breaker.state == "OPEN":
+            if now - storage_breaker.last_state_change > storage_breaker.recovery_timeout:
+                storage_breaker.state = "HALF-OPEN"
+                storage_breaker.last_state_change = now
+            else:
+                raise CircuitBreakerOpenException("tigris_storage", "Storage service temporarily unavailable.")
+
+        _do_delete()
+        storage_breaker._record_success()
+    except CircuitBreakerOpenException as cbo:
+        logger.error(f"Tigris Storage Circuit Breaker OPEN during delete: {cbo}")
     except ClientError as e:
+        storage_breaker._record_failure(e)
         logger.error(f"Failed to delete file {r2_key} from Tigris: {e}")
-        raise e
+    except Exception as e:
+        storage_breaker._record_failure(e)
 
 def get_file_content(r2_key: str) -> bytes | None:
     """
@@ -128,13 +169,33 @@ def get_file_content(r2_key: str) -> bytes | None:
     if isinstance(client, MagicMock):
         return None
 
-    try:
+    from app.core.circuit_breaker import storage_breaker, CircuitBreakerOpenException
+
+    def _do_get():
         obj = client.get_object(
             Bucket=settings.S3_BUCKET_NAME,
             Key=r2_key
         )
         return obj['Body'].read()
+
+    try:
+        import time
+        now = time.time()
+        if storage_breaker.state == "OPEN":
+            if now - storage_breaker.last_state_change > storage_breaker.recovery_timeout:
+                storage_breaker.state = "HALF-OPEN"
+                storage_breaker.last_state_change = now
+            else:
+                raise CircuitBreakerOpenException("tigris_storage", "Storage service temporarily unavailable.")
+
+        res = _do_get()
+        storage_breaker._record_success()
+        return res
+    except CircuitBreakerOpenException as cbo:
+        logger.error(f"Tigris Storage Circuit Breaker OPEN during get: {cbo}")
+        return None
     except Exception as e:
+        storage_breaker._record_failure(e)
         logger.error(f"Failed to get file {r2_key} from Tigris: {e}")
         return None
 

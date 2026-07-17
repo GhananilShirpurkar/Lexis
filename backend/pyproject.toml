@@ -28,6 +28,8 @@ dependencies = [
     "email-validator",
     "pypdf",
     "llama-index-readers-file",
+    "tavily-python>=0.7.26",
+    "redis>=8.0.1",
 ]
 
 [tool.hatch.build.targets.wheel]

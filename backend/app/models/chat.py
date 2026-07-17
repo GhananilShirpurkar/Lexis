@@ -23,6 +23,7 @@ class Chat(Base):
         UUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL"), nullable=True
     )
     is_unified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    is_workspace_chat: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     project_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
     )

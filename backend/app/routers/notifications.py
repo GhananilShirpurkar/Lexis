@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.models.notification import Notification
 from app.auth.ownership import assert_owns
 from app.schemas.notification import NotificationResponse, NotificationUpdate
+from app.cache import cache
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
@@ -20,20 +21,28 @@ router = APIRouter(prefix="/notifications", tags=["Notifications"])
 )
 async def list_notifications(
     request: Request,
+    limit: int = 50,
+    offset: int = 0,
     db: AsyncSession = Depends(get_db)
 ):
     """
     GET /notifications: Retrieves a list of notifications belonging to the authenticated user.
     """
     user_id = request.state.user_id
+    cache_key = f"user:{user_id}:notifications:{limit}:{offset}"
+    cached = await cache.get(cache_key)
+    if cached:
+        return [NotificationResponse(**n) for n in cached]
     
     query = select(Notification).where(
         Notification.user_id == user_id
-    ).order_by(Notification.created_at.desc())
+    ).order_by(Notification.created_at.desc()).limit(limit).offset(offset)
     
     result = await db.execute(query)
     notifications = result.scalars().all()
     
+    dumped = [NotificationResponse.model_validate(n).model_dump(mode="json") for n in notifications]
+    await cache.set(cache_key, dumped, ttl=60)
     return notifications
 
 
@@ -70,4 +79,5 @@ async def update_notification(
     await db.commit()
     await db.refresh(notification)
     
+    await cache.delete_pattern(f"user:{user_id}:notifications:*")
     return notification

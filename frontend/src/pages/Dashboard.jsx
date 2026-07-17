@@ -1,141 +1,58 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import { optimisticUpdate, shakeElement } from '../utils/optimistic';
 import { Link } from 'react-router-dom';
 import apiClient from '../api/client';
 import { 
   BookOpen, Search, Library, Terminal, Settings as SettingsIcon,
   Plus, MessageSquare, Paperclip, ArrowRight, Upload, X, Pencil,
-  FileText, AlertTriangle, Trash2, CheckCircle, ChevronLeft, ChevronRight
+  FileText, AlertTriangle, Trash2, CheckCircle, ChevronLeft, ChevronRight,
+  Globe, ExternalLink, FolderPlus, Users, Folder, ChevronDown, Sparkles
 } from '../components/icons';
 
 import ProfileDropdown from '../components/ProfileDropdown';
 import AlertsDropdown from '../components/AlertsDropdown';
 import ModelSelector from '../components/ModelSelector';
 import NavigationBar from '../components/NavigationBar';
+import SidebarNudgeBanner from '../components/SidebarNudgeBanner';
+import MessageContent from '../components/MessageContent';
 
 const FormattedMessage = ({ content, citations, onCitationClick }) => {
-  if (!content) return null;
-
-  const citationRegex = /\[(?:Page|page|p\.)\s*(\d+(?:\s*,\s*\d+)*)\]/g;
-
-  const renderTextWithCitations = (textStr) => {
-    const parts = [];
-    let lastIndex = 0;
-    let match;
-
-    while ((match = citationRegex.exec(textStr)) !== null) {
-      const pageStr = match[1];
-      const matchIndex = match.index;
-
-      if (matchIndex > lastIndex) {
-        parts.push(textStr.substring(lastIndex, matchIndex));
-      }
-
-      const pageNums = pageStr.split(',').map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n));
-      const targetPage = pageNums[0];
-
-      // Flexible matching for numeric page comparison
-      let matchedCitation = citations?.find(c => c.page_number !== null && Number(c.page_number) === Number(targetPage));
-      
-      // Fallback matching if page label formatting differs
-      if (!matchedCitation && citations && citations.length > 0) {
-        matchedCitation = citations[0];
-      }
-
-      const citationData = matchedCitation ? {
-        ...matchedCitation,
-        page_number: matchedCitation.page_number || targetPage
-      } : {
-        page_number: targetPage,
-        doc_filename: 'Source Document',
-        excerpt: `Full text excerpt retrieved for Page ${targetPage}.`
-      };
-
-      parts.push(
-        <button
-          key={`cit-${matchIndex}`}
-          type="button"
-          className="citation-pill"
-          title="Click to view full retrieved context excerpt"
-          onClick={() => onCitationClick(citationData)}
-        >
-          📍 Page {pageStr}
-        </button>
-      );
-
-      lastIndex = matchIndex + match[0].length;
-    }
-
-    if (lastIndex < textStr.length) {
-      parts.push(textStr.substring(lastIndex));
-    }
-
-    return parts;
-  };
-
-  const lines = content.split('\n');
-  const renderedElements = [];
-  let listItems = [];
-
-  const flushList = (key) => {
-    if (listItems.length > 0) {
-      renderedElements.push(
-        <ul key={`ul-${key}`} style={{ margin: '6px 0 10px 20px', padding: 0 }}>
-          {listItems.map((item, i) => (
-            <li key={i} style={{ marginBottom: '4px' }}>{renderTextWithCitations(item)}</li>
-          ))}
-        </ul>
-      );
-      listItems = [];
-    }
-  };
-
-  lines.forEach((line, index) => {
-    const trimmed = line.trim();
-
-    if (trimmed.startsWith('### ')) {
-      flushList(index);
-      renderedElements.push(
-        <h3 key={index} style={{ fontSize: '15px', marginTop: '10px', marginBottom: '4px', borderBottom: '1px solid rgba(61,79,151,0.2)', paddingBottom: '2px' }}>
-          {renderTextWithCitations(trimmed.replace('### ', ''))}
-        </h3>
-      );
-    } else if (trimmed.startsWith('## ') || trimmed.startsWith('# ')) {
-      flushList(index);
-      renderedElements.push(
-        <h3 key={index} style={{ fontSize: '16px', marginTop: '12px', marginBottom: '4px' }}>
-          {renderTextWithCitations(trimmed.replace(/^#+\s+/, ''))}
-        </h3>
-      );
-    } else if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
-      listItems.push(trimmed.replace(/^[\*\-]\s+/, ''));
-    } else if (trimmed.length === 0) {
-      flushList(index);
-    } else {
-      flushList(index);
-      renderedElements.push(
-        <p key={index} style={{ margin: '4px 0', lineHeight: '1.5' }}>
-          {renderTextWithCitations(trimmed)}
-        </p>
-      );
-    }
-  });
-
-  flushList('final');
-
-  return <div className="formatted-markdown">{renderedElements}</div>;
+  return (
+    <MessageContent
+      content={content}
+      citations={citations}
+      onCitationClick={onCitationClick}
+    />
+  );
 };
 
 const Dashboard = () => {
-  const { user, logout, token } = useAuth();
+  const { user, token } = useAuth();
+  const { toast } = useToast();
+
+  // Core data states
   const [chats, setChats] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
   const [messages, setMessages] = useState([]);
   const [citations, setCitations] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [projects, setProjects] = useState([]);
+
+  // Workspace states
+  const [workspaces, setWorkspaces] = useState([]);
+  const [collapsedWorkspaces, setCollapsedWorkspaces] = useState(new Set());
+  const [showCreateWorkspaceModal, setShowCreateWorkspaceModal] = useState(false);
+  const [showEditWorkspaceModal, setShowEditWorkspaceModal] = useState(null);
+  const [workspaceName, setWorkspaceName] = useState('');
+  const [selectedChatIds, setSelectedChatIds] = useState([]);
+  const [isSubmittingWorkspace, setIsSubmittingWorkspace] = useState(false);
+
+  // Active citation modal state
   const [selectedCitation, setSelectedCitation] = useState(null);
-  
-  // UI inputs
+
+  // Form states
   const [queryText, setQueryText] = useState('');
   const [provider, setProvider] = useState('gemini');
   const [isRenaming, setIsRenaming] = useState(false);
@@ -154,19 +71,61 @@ const Dashboard = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
+  // Web search state
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+  const [webSourcesMap, setWebSourcesMap] = useState({});  // msgIndex -> web_sources[]
+  const [webSearchCount, setWebSearchCount] = useState(0);
+
+  // Sizing & density states
+  const [fontSize, setFontSize] = useState('medium');
+  const [density, setDensity] = useState('comfortable');
+
+  // DOM Refs for target shake animations
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const newChatBtnRef = useRef(null);
+  const sidebarSessionListRef = useRef(null);
+  const alertsDropdownRef = useRef(null);
+  const projectListRef = useRef(null);
 
   // Load initial data
   useEffect(() => {
     fetchChats();
     fetchNotifications();
+    fetchProjects();
+    fetchWorkspaces();
+    fetchSettings();
   }, []);
 
   // Auto-scroll chat
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamedResponse]);
+
+  const getBubblePadding = (role) => {
+    if (density === 'compact') {
+      return role === 'user' ? '8px 12px' : '12px 16px';
+    }
+    return role === 'user' ? '12px 24px' : '24px 32px';
+  };
+
+  const getBubbleFontSize = () => {
+    if (fontSize === 'small') return '13px';
+    if (fontSize === 'large') return '17px';
+    return '15px';
+  };
+
+  const fetchSettings = async () => {
+    try {
+      const res = await apiClient.get('/users/me/settings');
+      if (res.data) {
+        setFontSize(res.data.font_size || 'medium');
+        setDensity(res.data.density || 'comfortable');
+      }
+    } catch (err) {
+      console.error('Error fetching settings:', err);
+    }
+  };
 
   const fetchChats = async () => {
     try {
@@ -183,10 +142,90 @@ const Dashboard = () => {
   const fetchNotifications = async () => {
     try {
       const res = await apiClient.get('/notifications');
-      // Filter out read notifications
       setNotifications(res.data.filter(n => !n.is_read));
     } catch (err) {
       console.error('Error fetching notifications:', err);
+    }
+  };
+
+  const fetchProjects = async () => {
+    try {
+      const res = await apiClient.get('/projects');
+      setProjects(res.data || []);
+    } catch (err) {
+      console.error('Error fetching projects:', err);
+    }
+  };
+
+  const fetchWorkspaces = async () => {
+    try {
+      const res = await apiClient.get('/workspaces');
+      setWorkspaces(res.data || []);
+    } catch (err) {
+      console.error('Error fetching workspaces:', err);
+    }
+  };
+
+  const handleCreateWorkspace = async (e) => {
+    e?.preventDefault();
+    if (!workspaceName.trim()) return;
+    setIsSubmittingWorkspace(true);
+    try {
+      const res = await apiClient.post('/workspaces', {
+        name: workspaceName.trim(),
+        chat_ids: selectedChatIds
+      });
+      const newWs = res.data;
+      setWorkspaces(prev => [newWs, ...prev]);
+      setShowCreateWorkspaceModal(false);
+      setWorkspaceName('');
+      setSelectedChatIds([]);
+      toast?.success?.('Workspace created!');
+      
+      // Select newly created workspace chat
+      if (newWs.workspace_chat) {
+        selectChat(newWs.workspace_chat);
+      }
+    } catch (err) {
+      console.error('Error creating workspace:', err);
+      toast?.error?.(err.response?.data?.detail?.error?.message || 'Failed to create workspace');
+    } finally {
+      setIsSubmittingWorkspace(false);
+    }
+  };
+
+  const handleUpdateWorkspace = async (e) => {
+    e?.preventDefault();
+    if (!workspaceName.trim() || !showEditWorkspaceModal) return;
+    setIsSubmittingWorkspace(true);
+    const wsId = showEditWorkspaceModal.id;
+    try {
+      const res = await apiClient.put(`/workspaces/${wsId}`, {
+        name: workspaceName.trim(),
+        chat_ids: selectedChatIds
+      });
+      setWorkspaces(prev => prev.map(w => w.id === wsId ? res.data : w));
+      setShowEditWorkspaceModal(null);
+      setWorkspaceName('');
+      setSelectedChatIds([]);
+      toast?.success?.('Workspace updated!');
+    } catch (err) {
+      console.error('Error updating workspace:', err);
+      toast?.error?.(err.response?.data?.detail?.error?.message || 'Failed to update workspace');
+    } finally {
+      setIsSubmittingWorkspace(false);
+    }
+  };
+
+  const handleDeleteWorkspace = async (wsId) => {
+    try {
+      await apiClient.delete(`/workspaces/${wsId}`);
+      setWorkspaces(prev => prev.filter(w => w.id !== wsId));
+      toast?.success?.('Workspace deleted');
+      fetchChats();
+    } catch (err) {
+      console.error('Error deleting workspace:', err);
+      toast?.error?.('Failed to delete workspace');
     }
   };
 
@@ -198,11 +237,12 @@ const Dashboard = () => {
     setCitations([]);
     setStreamedResponse('');
 
+    if (chat.isOptimistic) return;
+
     try {
       const res = await apiClient.get(`/chats/${chat.id}/messages`);
       setMessages(res.data);
       
-      // Extract citations from the messages
       const allCitations = res.data
         .filter(m => m.role === 'assistant' && m.citations)
         .flatMap(m => m.citations);
@@ -212,14 +252,44 @@ const Dashboard = () => {
     }
   };
 
+  /**
+   * Action 1: New Chat Initialization (Optimistic)
+   */
   const handleCreateChat = async () => {
-    try {
-      const res = await apiClient.post('/chats', { title: 'New Chat' });
-      setChats([res.data, ...chats]);
-      selectChat(res.data);
-    } catch (err) {
-      alert(err.response?.data?.detail?.error?.message || 'Failed to create chat. Max 40 chats limit.');
-    }
+    const tempId = `temp-chat-${crypto.randomUUID()}`;
+    const previousChats = [...chats];
+    const previousActiveChat = activeChat;
+    const tempChat = {
+      id: tempId,
+      title: 'New Chat',
+      display_name: 'New Chat',
+      created_at: new Date().toISOString(),
+      isOptimistic: true
+    };
+
+    await optimisticUpdate({
+      optimisticFn: () => {
+        setChats([tempChat, ...chats]);
+        setActiveChat(tempChat);
+        setMessages([]);
+        setCitations([]);
+        setStreamedResponse('');
+      },
+      apiCall: async () => {
+        const res = await apiClient.post('/chats', { title: 'New Chat' });
+        const realChat = res.data;
+        setChats(prev => prev.map(c => c.id === tempId ? realChat : c));
+        setActiveChat(realChat);
+        return realChat;
+      },
+      rollbackFn: () => {
+        setChats(previousChats);
+        setActiveChat(previousActiveChat);
+      },
+      errorMessage: "⚠️ Couldn't create chat session. Please retry.",
+      targetRef: newChatBtnRef,
+      toast
+    });
   };
 
   const [deleteTargetChat, setDeleteTargetChat] = useState(null);
@@ -229,48 +299,151 @@ const Dashboard = () => {
     setDeleteTargetChat(chat);
   };
 
+  /**
+   * Action 2: Chat Deletion (Optimistic)
+   */
   const confirmDeleteChat = async () => {
     if (!deleteTargetChat) return;
-    const chatId = deleteTargetChat.id;
-    try {
-      await apiClient.delete(`/chats/${chatId}`);
-      const remainingChats = chats.filter(c => c.id !== chatId);
-      setChats(remainingChats);
-      if (activeChat?.id === chatId) {
-        setActiveChat(remainingChats.length > 0 ? remainingChats[0] : null);
-        if (remainingChats.length > 0) selectChat(remainingChats[0]);
-      }
-    } catch (err) {
-      console.error('Error deleting chat:', err);
-    } finally {
-      setDeleteTargetChat(null);
-    }
+    const targetChat = deleteTargetChat;
+    const targetId = targetChat.id;
+    const previousChats = [...chats];
+    const previousActiveChat = activeChat;
+
+    setDeleteTargetChat(null);
+
+    await optimisticUpdate({
+      optimisticFn: () => {
+        const remainingChats = chats.filter(c => c.id !== targetId);
+        setChats(remainingChats);
+        if (activeChat?.id === targetId) {
+          const nextActive = remainingChats.length > 0 ? remainingChats[0] : null;
+          setActiveChat(nextActive);
+          if (nextActive) selectChat(nextActive);
+          else setMessages([]);
+        }
+      },
+      apiCall: async () => {
+        await apiClient.delete(`/chats/${targetId}`);
+      },
+      rollbackFn: () => {
+        setChats(previousChats);
+        setActiveChat(previousActiveChat);
+      },
+      errorMessage: `⚠️ Couldn't delete session "${targetChat.display_name || targetChat.title}". Restored.`,
+      targetRef: sidebarSessionListRef,
+      toast
+    });
   };
 
   const handleRenameChat = async (e) => {
     e.preventDefault();
-    if (!renameValue.trim() || renameValue.length > 60) return;
+    if (!renameValue.trim() || renameValue.length > 60 || !activeChat) return;
 
-    try {
-      const res = await apiClient.patch(`/chats/${activeChat.id}`, {
-        display_name: renameValue.trim()
-      });
-      setChats(chats.map(c => c.id === activeChat.id ? res.data : c));
-      setActiveChat(res.data);
-      setIsRenaming(false);
-    } catch (err) {
-      console.error('Error renaming chat:', err);
-    }
+    const previousChats = [...chats];
+    const previousActiveChat = activeChat;
+    const newName = renameValue.trim();
+
+    await optimisticUpdate({
+      optimisticFn: () => {
+        const updatedChat = { ...activeChat, display_name: newName };
+        setChats(chats.map(c => c.id === activeChat.id ? updatedChat : c));
+        setActiveChat(updatedChat);
+        setIsRenaming(false);
+      },
+      apiCall: async () => {
+        const res = await apiClient.patch(`/chats/${activeChat.id}`, { display_name: newName });
+        setChats(prev => prev.map(c => c.id === activeChat.id ? res.data : c));
+        setActiveChat(res.data);
+      },
+      rollbackFn: () => {
+        setChats(previousChats);
+        setActiveChat(previousActiveChat);
+      },
+      errorMessage: `⚠️ Couldn't rename session. Restored original title.`,
+      targetRef: sidebarSessionListRef,
+      toast
+    });
   };
 
+  /**
+   * Action 3: Notification Dismissal (Optimistic)
+   */
   const handleDismissNotification = async (notifId, e) => {
-    e.stopPropagation();
-    try {
-      await apiClient.patch(`/notifications/${notifId}`, { is_read: true });
-      setNotifications(notifications.filter(n => n.id !== notifId));
-    } catch (err) {
-      console.error('Error dismissing notification:', err);
-    }
+    if (e) e.stopPropagation();
+    const previousNotifications = [...notifications];
+
+    await optimisticUpdate({
+      optimisticFn: () => {
+        setNotifications(notifications.filter(n => n.id !== notifId));
+      },
+      apiCall: async () => {
+        await apiClient.patch(`/notifications/${notifId}`, { is_read: true });
+      },
+      rollbackFn: () => {
+        setNotifications(previousNotifications);
+      },
+      errorMessage: "⚠️ Couldn't dismiss notification. Restored.",
+      targetRef: alertsDropdownRef,
+      toast
+    });
+  };
+
+  /**
+   * Action 4: Project Chat Membership Add/Remove (Optimistic)
+   */
+  const handleAddChatToProject = async (projectId, chatId) => {
+    const previousProjects = [...projects];
+
+    await optimisticUpdate({
+      optimisticFn: () => {
+        setProjects(prev => prev.map(p => {
+          if (p.id === projectId) {
+            return {
+              ...p,
+              chat_ids: p.chat_ids ? [...p.chat_ids, chatId] : [chatId]
+            };
+          }
+          return p;
+        }));
+      },
+      apiCall: async () => {
+        const res = await apiClient.post(`/projects/${projectId}/chats`, { chat_id: chatId });
+        setProjects(prev => prev.map(p => p.id === projectId ? res.data : p));
+      },
+      rollbackFn: () => {
+        setProjects(previousProjects);
+      },
+      errorMessage: "⚠️ Couldn't add chat to project. Restored.",
+      targetRef: projectListRef,
+      toast
+    });
+  };
+
+  const handleRemoveChatFromProject = async (projectId, chatId) => {
+    const previousProjects = [...projects];
+
+    await optimisticUpdate({
+      optimisticFn: () => {
+        setProjects(prev => prev.map(p => {
+          if (p.id === projectId) {
+            return {
+              ...p,
+              chat_ids: (p.chat_ids || []).filter(id => id !== chatId)
+            };
+          }
+          return p;
+        }));
+      },
+      apiCall: async () => {
+        await apiClient.delete(`/projects/${projectId}/chats/${chatId}`);
+      },
+      rollbackFn: () => {
+        setProjects(previousProjects);
+      },
+      errorMessage: "⚠️ Couldn't remove chat from project. Restored.",
+      targetRef: projectListRef,
+      toast
+    });
   };
 
   const processFileUpload = async (file) => {
@@ -368,7 +541,8 @@ const Dashboard = () => {
         },
         body: JSON.stringify({
           content: userMessageText,
-          provider: provider
+          provider: provider,
+          web_search: webSearchEnabled
         })
       });
 
@@ -381,6 +555,8 @@ const Dashboard = () => {
       const decoder = new TextDecoder('utf-8');
       let done = false;
       let tempAnswer = '';
+      let pendingWebSources = [];
+      let systemWarningText = null;
 
       while (!done) {
         const { value, done: readerDone } = await reader.read();
@@ -396,16 +572,48 @@ const Dashboard = () => {
               if (data.type === 'token') {
                 tempAnswer += data.content;
                 setStreamedResponse(tempAnswer);
+              } else if (data.type === 'web_search_status') {
+                setWebSearchCount(data.count || 0);
+                if (data.warning) {
+                  systemWarningText = data.warning;
+                }
               } else if (data.type === 'done') {
                 const finalCitations = data.citations || [];
+                pendingWebSources = data.web_sources || [];
+                const msgId = data.message_id;
+                if (data.system_warning) {
+                  systemWarningText = data.system_warning;
+                }
                 
-                // Immediately commit to local UI state to prevent disappearances/flicker
+                // Immediately commit to local UI state
+                const newMsgIndex = messages.length + 1;
                 setMessages(prev => [
                   ...prev,
-                  { role: 'assistant', content: tempAnswer, citations: finalCitations, created_at: new Date() }
+                  { 
+                    role: 'assistant', 
+                    content: tempAnswer, 
+                    citations: finalCitations, 
+                    created_at: new Date(),
+                    had_web_search: webSearchEnabled,
+                    web_source_count: pendingWebSources.length,
+                    system_warning: systemWarningText
+                  }
                 ]);
+
+                // Store web sources keyed by message index and message_id
+                if (pendingWebSources.length > 0) {
+                  setWebSourcesMap(prev => {
+                    const newMap = { ...prev, [newMsgIndex]: pendingWebSources };
+                    if (msgId) {
+                      newMap[msgId] = pendingWebSources;
+                    }
+                    return newMap;
+                  });
+                }
+
                 setStreamedResponse('');
                 setIsGenerating(false);
+                setWebSearchCount(0);
 
                 // Background sync with database
                 try {
@@ -431,17 +639,13 @@ const Dashboard = () => {
       }
 
       setIsGenerating(false);
-      setMessages([
-        ...newMessages,
-        { role: 'assistant', content: accumulatedText, citations: citations, created_at: new Date().toISOString() }
-      ]);
       setStreamedResponse('');
     } catch (err) {
       console.error('Streaming response failed', err);
       setIsGenerating(false);
-      setMessages([
-        ...newMessages,
-        { role: 'assistant', content: '⚠️ CONNECTION FAILURE: Unable to generate LLM response. Verify server status.', is_error: true, created_at: new Date().toISOString() }
+      setMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: `⚠️ CONNECTION FAILURE: ${err.message || 'Unable to generate LLM response. Verify server status.'}`, is_error: true, created_at: new Date() }
       ]);
       setStreamedResponse('');
     }
@@ -449,7 +653,12 @@ const Dashboard = () => {
 
   return (
     <div className="app-shell">
-      <NavigationBar currentModel={provider} onModelChange={setProvider} />
+      <NavigationBar 
+        currentModel={provider} 
+        onModelChange={setProvider} 
+        customNotifications={notifications}
+        onCustomDismiss={handleDismissNotification}
+      />
 
       <div className="subnav-strip">
         <div className="subnav-links" style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
@@ -475,37 +684,210 @@ const Dashboard = () => {
             </button>
           </div>
 
-          <button className="sidebar-new-session-btn" onClick={handleCreateChat}>
-            <Plus className="icon-small" />
-            <span>NEW SESSION</span>
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xs)', marginBottom: 'var(--space-md)' }}>
+            <button 
+              className="sidebar-new-session-btn outline-btn" 
+              style={{ backgroundColor: 'transparent', color: 'var(--color-ink)', border: '1px solid var(--color-hairline-translucent)' }}
+              onClick={() => {
+                setWorkspaceName('');
+                setSelectedChatIds([]);
+                setShowCreateWorkspaceModal(true);
+              }}
+              title="Create Workspace"
+            >
+              <FolderPlus className="icon-small" />
+              {sidebarOpen && <span>NEW WORKSPACE</span>}
+            </button>
+
+            <button ref={newChatBtnRef} className="sidebar-new-session-btn" onClick={handleCreateChat} title="New Session">
+              <Plus className="icon-small" />
+              {sidebarOpen && <span>NEW SESSION</span>}
+            </button>
+          </div>
+
+          {sidebarOpen && <SidebarNudgeBanner />}
 
           {sidebarOpen && (
-            <div className="sidebar-session-list">
-              {chats.length === 0 ? (
+            <div ref={sidebarSessionListRef} className="sidebar-session-list">
+              {chats.filter(c => !c.is_workspace_chat).length === 0 ? (
                 <div className="sidebar-empty">NO SESSIONS STORED</div>
               ) : (
-                chats.map(chat => (
+                chats.filter(c => !c.is_workspace_chat).map(chat => (
                   <div 
                     key={chat.id} 
-                    className={`sidebar-session-item ${activeChat?.id === chat.id ? 'active' : ''}`}
+                    className={`sidebar-session-item ${activeChat?.id === chat.id ? 'active' : ''} ${chat.isOptimistic ? 'is-optimistic' : ''}`}
                     onClick={() => selectChat(chat)}
                   >
                     <MessageSquare className="icon-small" />
                     <span className="session-item-name">
                       {chat.display_name || chat.title}
                     </span>
-                    <button 
-                      className="btn-ghost delete-session-btn" 
-                      onClick={(e) => onRequestDeleteChat(chat, e)}
-                      title="Delete Session"
-                      style={{ padding: '2px 4px', opacity: 0.7, transition: 'all 0.2s', display: 'flex', alignItems: 'center' }}
-                    >
-                      <Trash2 className="icon-small" />
-                    </button>
+                    {chat.isOptimistic ? (
+                      <span style={{ fontSize: '10px', opacity: 0.6, fontStyle: 'italic', marginLeft: 'auto' }}>CREATING...</span>
+                    ) : (
+                      <button 
+                        className="btn-ghost delete-session-btn" 
+                        onClick={(e) => onRequestDeleteChat(chat, e)}
+                        title="Delete Session"
+                        style={{ padding: '2px 4px', opacity: 0.7, transition: 'all 0.2s', display: 'flex', alignItems: 'center' }}
+                      >
+                        <Trash2 className="icon-small" />
+                      </button>
+                    )}
                   </div>
                 ))
               )}
+            </div>
+          )}
+
+          {sidebarOpen && (
+            <div style={{ marginTop: 'var(--space-xl)', paddingTop: 'var(--space-lg)', borderTop: '1px solid var(--color-hairline)' }}>
+              <div className="sidebar-section-header" style={{ marginBottom: 'var(--space-sm)' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}>
+                  <FolderPlus className="icon-small" /> WORKSPACES ({workspaces.length})
+                </span>
+              </div>
+
+              <div className="sidebar-session-list">
+                {workspaces.length === 0 ? (
+                  <div className="sidebar-empty">NO WORKSPACES CREATED</div>
+                ) : (
+                  workspaces.map(ws => {
+                    const isCollapsed = collapsedWorkspaces.has(ws.id);
+                    const toggleCollapse = () => {
+                      setCollapsedWorkspaces(prev => {
+                        const next = new Set(prev);
+                        if (next.has(ws.id)) next.delete(ws.id);
+                        else next.add(ws.id);
+                        return next;
+                      });
+                    };
+
+                    return (
+                      <div key={ws.id} style={{ marginBottom: 'var(--space-xs)', border: '1px solid var(--color-hairline)', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--color-canvas-soft)', overflow: 'hidden' }}>
+                        <div 
+                          style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', backgroundColor: 'rgba(255,255,255,0.02)' }}
+                          onClick={toggleCollapse}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)', fontSize: '13px', color: 'var(--color-ink)', fontWeight: 400 }}>
+                            <Folder className="icon-small" style={{ color: 'var(--color-body-mid)' }} />
+                            <span>{ws.name}</span>
+                            <span style={{ fontSize: '11px', color: 'var(--color-body-mid)' }}>({ws.member_chats?.length || 0}/4)</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xxs)' }} onClick={e => e.stopPropagation()}>
+                            <button 
+                              className="btn-ghost"
+                              style={{ padding: '2px 4px', color: 'var(--color-body-mid)' }}
+                              onClick={() => {
+                                setShowEditWorkspaceModal(ws);
+                                setWorkspaceName(ws.name);
+                                setSelectedChatIds(ws.member_chats?.map(c => c.id) || []);
+                              }}
+                              title="Edit Workspace"
+                            >
+                              <Pencil className="icon-tiny" />
+                            </button>
+                            <button 
+                              className="btn-ghost"
+                              style={{ padding: '2px 4px', color: 'var(--color-error)' }}
+                              onClick={() => handleDeleteWorkspace(ws.id)}
+                              title="Delete Workspace"
+                            >
+                              <Trash2 className="icon-tiny" />
+                            </button>
+                            <button className="btn-ghost" style={{ padding: '2px', color: 'var(--color-body-mid)' }} onClick={toggleCollapse}>
+                              {isCollapsed ? <ChevronRight className="icon-tiny" /> : <ChevronDown className="icon-tiny" />}
+                            </button>
+                          </div>
+                        </div>
+
+                        {!isCollapsed && (
+                          <div style={{ padding: '4px 6px', borderTop: '1px solid var(--color-hairline)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            {ws.workspace_chat && (
+                              <div 
+                                className={`sidebar-session-item ${activeChat?.id === ws.workspace_chat.id ? 'active' : ''}`}
+                                style={{ margin: '2px 0', borderLeft: '2px solid var(--color-primary)' }}
+                                onClick={() => selectChat(ws.workspace_chat)}
+                              >
+                                <Sparkles className="icon-small" style={{ color: 'var(--color-ink)' }} />
+                                <span className="session-item-name" style={{ color: 'var(--color-ink)' }}>
+                                  {ws.workspace_chat.display_name || ws.workspace_chat.title}
+                                </span>
+                              </div>
+                            )}
+
+                            {ws.member_chats?.map(mChat => (
+                              <div 
+                                key={mChat.id}
+                                className={`sidebar-session-item ${activeChat?.id === mChat.id ? 'active' : ''}`}
+                                style={{ paddingLeft: '20px', fontSize: '12px' }}
+                                onClick={() => selectChat(mChat)}
+                              >
+                                <FileText className="icon-tiny" style={{ color: 'var(--color-body-mid)' }} />
+                                <span className="session-item-name">{mChat.display_name || mChat.title}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+
+          {sidebarOpen && (
+            <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid #3d4f97' }}>
+              <div className="sidebar-section-header" style={{ marginBottom: '8px' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', color: '#ecab37' }}>
+                  <FolderPlus className="icon-small" /> PROJECTS ({projects.length})
+                </span>
+              </div>
+              <div ref={projectListRef} className="sidebar-session-list">
+                {projects.length === 0 ? (
+                  <div className="sidebar-empty">NO PROJECTS ACTIVE</div>
+                ) : (
+                  projects.map(proj => {
+                    const isChatMember = activeChat && proj.chat_ids && proj.chat_ids.includes(activeChat.id);
+                    return (
+                      <div key={proj.id} style={{ padding: '8px', marginBottom: '6px', backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: '4px', border: '1px solid rgba(61,79,151,0.4)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', fontWeight: '700', color: '#9fbee7' }}>
+                          <span>{proj.name}</span>
+                          <span style={{ fontSize: '10px', opacity: 0.7 }}>{proj.chat_ids?.length || 0}/4 CHATS</span>
+                        </div>
+                        {activeChat && !activeChat.isOptimistic && (
+                          <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'flex-end' }}>
+                            {isChatMember ? (
+                              <button 
+                                className="btn btn-secondary" 
+                                style={{ fontSize: '10px', padding: '2px 6px', color: '#e60012', borderColor: '#e60012' }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemoveChatFromProject(proj.id, activeChat.id);
+                                }}
+                              >
+                                Remove Current Chat
+                              </button>
+                            ) : (
+                              <button 
+                                className="btn btn-secondary" 
+                                style={{ fontSize: '10px', padding: '2px 6px', color: '#ecab37', borderColor: '#ecab37' }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAddChatToProject(proj.id, activeChat.id);
+                                }}
+                              >
+                                + Add Current Chat
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           )}
         </aside>
@@ -614,7 +996,18 @@ const Dashboard = () => {
                 <div 
                   key={idx} 
                   className={`message-bubble ${m.role === 'user' ? 'message-bubble-user' : m.is_error ? 'message-bubble-error' : 'message-bubble-assistant'}`}
+                  style={{
+                    padding: getBubblePadding(m.role),
+                    fontSize: getBubbleFontSize(),
+                    lineHeight: fontSize === 'small' ? '1.4' : fontSize === 'large' ? '1.8' : '1.6'
+                  }}
                 >
+                  {m.system_warning && (
+                    <div className="system-warning-pill">
+                      <AlertTriangle className="icon-small" />
+                      <span>⚠️ {m.system_warning}</span>
+                    </div>
+                  )}
                   {m.role === 'user' || m.is_error ? (
                     <div style={{ marginBottom: '6px', whiteSpace: 'pre-wrap' }}>{m.content}</div>
                   ) : (
@@ -624,15 +1017,60 @@ const Dashboard = () => {
                       onCitationClick={(cit) => setSelectedCitation(cit)} 
                     />
                   )}
-                  <div style={{ fontSize: '10px', opacity: 0.7, textTransform: 'uppercase', textAlign: m.role === 'user' ? 'right' : 'left', marginTop: '6px' }}>
-                    {m.provider ? `${m.provider.toUpperCase()} • ` : ''}
+                  <div style={{ fontSize: '10px', opacity: 0.7, textTransform: 'uppercase', textAlign: m.role === 'user' ? 'right' : 'left', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                    {(m.role === 'assistant' && m.provider) ? `${m.provider.toUpperCase()} • ` : ''}
                     {new Date(m.created_at).toLocaleTimeString()}
+                    {m.had_web_search && (
+                      <span className="web-search-indicator">
+                        <Globe className="icon-tiny" /> Searched the web • {m.web_source_count} source{m.web_source_count !== 1 ? 's' : ''}
+                      </span>
+                    )}
                   </div>
+
+                  {/* Render web source cards if available for this message */}
+                  {(() => {
+                    const sources = (m.id && webSourcesMap[m.id]) || webSourcesMap[idx];
+                    if (!sources || sources.length === 0) return null;
+                    return (
+                      <div className="web-sources-section">
+                        <div className="web-sources-header">
+                          <Globe className="icon-small" />
+                          <span>Web Sources</span>
+                        </div>
+                        <div className="web-sources-grid">
+                          {sources.map((ws, wsIdx) => (
+                            <a 
+                              key={wsIdx} 
+                              href={ws.url} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="web-source-card"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div className="ws-card-title">
+                                <span>{ws.title}</span>
+                                <ExternalLink className="icon-tiny" />
+                              </div>
+                              <div className="ws-card-snippet">{ws.snippet}</div>
+                              <div className="ws-card-url">{new URL(ws.url).hostname}</div>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               ))}
 
               {streamedResponse && (
-                <div className="message-bubble message-bubble-assistant">
+                <div 
+                  className="message-bubble message-bubble-assistant"
+                  style={{
+                    padding: getBubblePadding('assistant'),
+                    fontSize: getBubbleFontSize(),
+                    lineHeight: fontSize === 'small' ? '1.4' : fontSize === 'large' ? '1.8' : '1.6'
+                  }}
+                >
                   <FormattedMessage 
                     content={streamedResponse} 
                     citations={citations} 
@@ -643,7 +1081,14 @@ const Dashboard = () => {
               )}
 
               {isGenerating && !streamedResponse && (
-                <div className="message-bubble message-bubble-assistant">
+                <div 
+                  className="message-bubble message-bubble-assistant"
+                  style={{
+                    padding: getBubblePadding('assistant'),
+                    fontSize: getBubbleFontSize(),
+                    lineHeight: fontSize === 'small' ? '1.4' : fontSize === 'large' ? '1.8' : '1.6'
+                  }}
+                >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <div className="thinking-indicator">
                       <div className="thinking-dot"></div>
@@ -651,7 +1096,11 @@ const Dashboard = () => {
                       <div className="thinking-dot"></div>
                     </div>
                     <span style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '0.5px' }}>
-                      SEARCHING VECTOR INDEX & GENERATING RESPONSE...
+                      {webSearchEnabled 
+                        ? (webSearchCount > 0 
+                            ? `WEB SEARCH COMPLETE (${webSearchCount} sources) • GENERATING RESPONSE...`
+                            : 'SEARCHING WEB & VECTOR INDEX...')
+                        : 'SEARCHING VECTOR INDEX & GENERATING RESPONSE...'}
                     </span>
                   </div>
                 </div>
@@ -663,9 +1112,19 @@ const Dashboard = () => {
 
           <div className="chat-input-bar">
             <form onSubmit={handleSendQuery} className="chat-input-wrapper">
+              <button
+                id="web-search-toggle"
+                type="button"
+                className={`web-search-toggle ${webSearchEnabled ? 'active' : ''}`}
+                onClick={() => setWebSearchEnabled(!webSearchEnabled)}
+                title="Enable web search to supplement your documents with real-time information"
+              >
+                <Globe className="icon-small" />
+                {webSearchEnabled && <span className="ws-toggle-label">WEB</span>}
+              </button>
               <textarea 
                 className="chat-textarea"
-                placeholder={activeChat ? "Type your query or instruction..." : "Attach a document to begin querying..."}
+                placeholder={activeChat ? (webSearchEnabled ? "Search the web and your documents..." : "Type your query or instruction...") : "Attach a document to begin querying..."}
                 value={queryText}
                 onChange={(e) => setQueryText(e.target.value)}
                 disabled={!activeChat || isGenerating}
@@ -690,14 +1149,19 @@ const Dashboard = () => {
 
       {selectedCitation && (
         <div className="modal-backdrop" onClick={() => setSelectedCitation(null)}>
-          <div className="modal-content major-panel" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-container modal-md" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <FileText className="icon-large" />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                <FileText className="icon" style={{ color: 'var(--color-ink)' }} />
                 <div>
-                  <h4 style={{ margin: 0, fontSize: '14px', color: '#ffffff', textTransform: 'uppercase' }}>
+                  <h4 className="modal-title" style={{ margin: 0, fontSize: '15px' }}>
                     {selectedCitation.doc_filename || 'Source Document'}
                   </h4>
+                  {selectedCitation.source_chat && (
+                    <div style={{ fontSize: '11px', color: 'var(--color-body-mid)', fontWeight: 600, marginTop: '2px', letterSpacing: '0.5px' }}>
+                      SOURCE CHAT: {selectedCitation.source_chat}
+                    </div>
+                  )}
                   {selectedCitation.page_number && (
                     <span className="citation-badge citation-badge-page" style={{ marginTop: '4px', display: 'inline-block' }}>
                       PAGE {selectedCitation.page_number}
@@ -705,23 +1169,164 @@ const Dashboard = () => {
                   )}
                 </div>
               </div>
-              <button className="icon-btn" onClick={() => setSelectedCitation(null)} style={{ background: 'none', border: 'none', color: '#9fbee7', fontSize: '18px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+              <button className="modal-close-btn" onClick={() => setSelectedCitation(null)}>
                 <X className="icon" />
               </button>
             </div>
 
-            <div className="modal-body" style={{ padding: '16px', backgroundColor: '#dedede', color: '#21242e', borderRadius: '4px', fontFamily: 'monospace', fontSize: '13px', lineHeight: '1.6', whiteSpace: 'pre-wrap', maxHeight: '320px', overflowY: 'auto', border: '1px solid #3d4f97' }}>
+            <div className="modal-body" style={{ padding: 'var(--space-md)', backgroundColor: 'var(--color-canvas-soft)', color: 'var(--color-ink)', borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-mono)', fontSize: '13px', lineHeight: '1.6', whiteSpace: 'pre-wrap', maxHeight: '320px', overflowY: 'auto', border: '1px solid var(--color-hairline-translucent)' }}>
               "{selectedCitation.excerpt || selectedCitation.content || 'Retrieved context node from vector index.'}"
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px' }}>
-              <span style={{ fontSize: '11px', color: '#9fbee7', fontFamily: 'VT323, monospace' }}>
+            <div className="modal-footer" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11px', color: 'var(--color-body-mid)', fontFamily: 'var(--font-mono)' }}>
                 VERIFIED RAG SOURCE CONTEXT
               </span>
-              <button className="nav-btn primary" onClick={() => setSelectedCitation(null)}>
+              <button className="btn btn-primary" onClick={() => setSelectedCitation(null)}>
                 Close Preview
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {(showCreateWorkspaceModal || showEditWorkspaceModal) && (
+        <div className="modal-backdrop" onClick={() => { setShowCreateWorkspaceModal(false); setShowEditWorkspaceModal(null); }}>
+          <div className="modal-container modal-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                <FolderPlus className="icon" style={{ color: 'var(--color-ink)' }} />
+                <div>
+                  <h3 className="modal-title" style={{ margin: 0, fontSize: '16px', color: 'var(--color-ink)' }}>
+                    {showEditWorkspaceModal ? 'EDIT WORKSPACE' : 'CREATE WORKSPACE'}
+                  </h3>
+                  <span style={{ fontSize: '12px', color: 'var(--color-body-mid)' }}>
+                    Combine up to 4 chats into a unified knowledge base
+                  </span>
+                </div>
+              </div>
+              <button 
+                type="button"
+                className="modal-close-btn" 
+                onClick={() => { setShowCreateWorkspaceModal(false); setShowEditWorkspaceModal(null); }}
+              >
+                <X className="icon" />
+              </button>
+            </div>
+
+            <form onSubmit={showEditWorkspaceModal ? handleUpdateWorkspace : handleCreateWorkspace}>
+              <div className="modal-body">
+                <div>
+                  <label className="form-label" style={{ display: 'block', marginBottom: 'var(--space-xs)' }}>
+                    WORKSPACE NAME
+                  </label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="e.g. Q3 Financial Audit" 
+                    value={workspaceName} 
+                    onChange={(e) => setWorkspaceName(e.target.value)}
+                    required
+                    style={{ width: '100%' }}
+                    autoFocus
+                  />
+                </div>
+
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-xs)' }}>
+                    <label className="form-label">
+                      SELECT MEMBER CHATS ({selectedChatIds.length}/4)
+                    </label>
+                    {selectedChatIds.length >= 4 && (
+                      <span style={{ fontSize: '11px', color: 'var(--color-error)' }}>Max limit reached</span>
+                    )}
+                  </div>
+
+                  <div style={{ 
+                    maxHeight: '220px', 
+                    overflowY: 'auto', 
+                    border: '1px solid var(--color-hairline-translucent)', 
+                    borderRadius: 'var(--radius-sm)', 
+                    backgroundColor: 'var(--color-canvas-soft)', 
+                    padding: 'var(--space-xs)' 
+                  }}>
+                    {chats.filter(c => !c.is_workspace_chat).length === 0 ? (
+                      <div style={{ padding: 'var(--space-md)', textAlign: 'center', fontSize: '12px', color: 'var(--color-body-mid)' }}>
+                        No chats available. Create individual chats first to add them to a workspace.
+                      </div>
+                    ) : (
+                      chats.filter(c => !c.is_workspace_chat).map(c => {
+                        const isSelected = selectedChatIds.includes(c.id);
+                        const isDisabled = !isSelected && selectedChatIds.length >= 4;
+
+                        const toggleSelect = () => {
+                          if (isSelected) {
+                            setSelectedChatIds(prev => prev.filter(id => id !== c.id));
+                          } else if (!isDisabled) {
+                            setSelectedChatIds(prev => [...prev, c.id]);
+                          }
+                        };
+
+                        return (
+                          <div 
+                            key={c.id} 
+                            onClick={toggleSelect}
+                            style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justify: 'space-between', 
+                              padding: '8px 12px', 
+                              marginBottom: 'var(--space-xxs)', 
+                              borderRadius: 'var(--radius-pill)', 
+                              backgroundColor: isSelected ? 'var(--color-hairline)' : 'transparent',
+                              border: '1px solid',
+                              borderColor: isSelected ? 'var(--color-hairline-translucent)' : 'transparent',
+                              cursor: isDisabled ? 'not-allowed' : 'pointer',
+                              opacity: isDisabled ? 0.4 : 1,
+                              transition: 'all 150ms ease'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                              <input 
+                                type="checkbox" 
+                                checked={isSelected} 
+                                onChange={toggleSelect}
+                                disabled={isDisabled}
+                                style={{ cursor: isDisabled ? 'not-allowed' : 'pointer', accentColor: 'var(--color-primary)' }}
+                              />
+                              <span style={{ fontSize: '13px', color: isSelected ? 'var(--color-ink)' : 'var(--color-body)', fontWeight: 400 }}>
+                                {c.display_name || c.title}
+                              </span>
+                            </div>
+                            <span style={{ fontSize: '11px', color: 'var(--color-body-mid)' }}>
+                              {c.current_doc_id ? '📄 Attached' : 'No doc'}
+                            </span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button 
+                  type="button" 
+                  className="btn outline-btn" 
+                  onClick={() => { setShowCreateWorkspaceModal(false); setShowEditWorkspaceModal(null); }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn btn-primary" 
+                  disabled={!workspaceName.trim() || isSubmittingWorkspace}
+                >
+                  <FolderPlus className="icon-small" />
+                  <span>{isSubmittingWorkspace ? 'SAVING...' : (showEditWorkspaceModal ? 'Update Workspace' : 'Create Workspace')}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

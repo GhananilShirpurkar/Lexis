@@ -74,6 +74,7 @@ async def check_expiry_warnings(db: AsyncSession) -> None:
     result = await db.execute(query)
     expiring_docs = result.scalars().all()
 
+    notifications_to_add = []
     for doc in expiring_docs:
         # Check if we have already sent a warning notification since the document was uploaded/reset
         notif_query = select(Notification).where(
@@ -88,20 +89,25 @@ async def check_expiry_warnings(db: AsyncSession) -> None:
 
         if not existing_notif:
             logger.info(f"Creating expiry warning notification for doc {doc.id} (user {doc.user_id})")
-            
-            notification = Notification(
-                user_id=doc.user_id,
-                title=f"Document Expiring Soon: {doc.filename}",
-                message=(
+            notifications_to_add.append({
+                "id": uuid.uuid4(),
+                "user_id": doc.user_id,
+                "title": f"Document Expiring Soon: {doc.filename}",
+                "message": (
                     f"Your document '{doc.filename}' (ID: {doc.id}) will expire on "
                     f"{doc.expiry_at.strftime('%Y-%m-%d %H:%M:%S')} UTC. "
                     f"Please re-upload it to keep it active."
                 ),
-                status="unread"
-            )
-            db.add(notification)
+                "status": "unread"
+            })
 
-    if expiring_docs:
+    if notifications_to_add:
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        BATCH_SIZE = 500
+        for i in range(0, len(notifications_to_add), BATCH_SIZE):
+            chunk = notifications_to_add[i:i + BATCH_SIZE]
+            stmt = pg_insert(Notification).values(chunk).on_conflict_do_nothing()
+            await db.execute(stmt)
         await db.commit()
 
 

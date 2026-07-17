@@ -71,37 +71,56 @@ async def stream_mock(prompt: str) -> AsyncGenerator[str, None]:
 
 async def stream_gemini(prompt: str) -> AsyncGenerator[str, None]:
     """
-    Streams response from official Gemini models using modern google.genai SDK.
+    Streams response from official Gemini models using modern google.genai SDK
+    protected by llm_breaker circuit breaker.
     """
+    from app.core.circuit_breaker import llm_breaker, CircuitBreakerOpenException
+
     if settings.FORCE_MOCK_LLM or not settings.GEMINI_API_KEY:
         async for chunk in stream_mock(prompt):
             yield chunk
         return
 
-    try:
-        client = genai.Client(api_key=settings.GEMINI_API_KEY)
-        
-        # Models supported by modern Google GenAI API
-        models_to_try = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
-        
-        for model_name in models_to_try:
-            try:
-                response = client.models.generate_content_stream(
-                    model=model_name,
-                    contents=prompt,
-                )
-                has_yielded = False
-                for chunk in response:
-                    if chunk.text:
-                        has_yielded = True
-                        yield chunk.text
-                if has_yielded:
-                    return
-            except Exception as model_err:
-                logger.warning(f"google.genai model {model_name} failed: {model_err}")
-                continue
-    except Exception as e:
-        logger.error(f"Google GenAI API streaming failed: {e}")
+    import time
+    now = time.time()
+    if llm_breaker.state == "OPEN":
+        if now - llm_breaker.last_state_change > llm_breaker.recovery_timeout:
+            llm_breaker.state = "HALF-OPEN"
+            llm_breaker.last_state_change = now
+        else:
+            raise CircuitBreakerOpenException(
+                "llm_provider",
+                "AI service temporarily unavailable. Please try again shortly."
+            )
+
+    async with llm_breaker.semaphore:
+        try:
+            client = genai.Client(api_key=settings.GEMINI_API_KEY)
+            models_to_try = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
+            
+            for model_name in models_to_try:
+                try:
+                    response = client.models.generate_content_stream(
+                        model=model_name,
+                        contents=prompt,
+                    )
+                    has_yielded = False
+                    for chunk in response:
+                        if chunk.text:
+                            has_yielded = True
+                            yield chunk.text
+                    if has_yielded:
+                        llm_breaker._record_success()
+                        return
+                except Exception as model_err:
+                    logger.warning(f"google.genai model {model_name} failed: {model_err}")
+                    continue
+            llm_breaker._record_failure(Exception("All Gemini models failed"))
+        except CircuitBreakerOpenException as cbo:
+            raise cbo
+        except Exception as e:
+            llm_breaker._record_failure(e)
+            logger.error(f"Google GenAI API streaming failed: {e}")
 
     # Fallback to mock if all official calls fail
     async for chunk in stream_mock(prompt):
@@ -109,34 +128,54 @@ async def stream_gemini(prompt: str) -> AsyncGenerator[str, None]:
 
 async def stream_groq(prompt: str) -> AsyncGenerator[str, None]:
     """
-    Streams response from Groq official model with fallback models.
+    Streams response from Groq official model protected by llm_breaker circuit breaker.
     """
+    from app.core.circuit_breaker import llm_breaker, CircuitBreakerOpenException
+
     if settings.FORCE_MOCK_LLM or not settings.GROQ_API_KEY:
         async for chunk in stream_mock(prompt):
             yield chunk
         return
 
-    try:
-        client = AsyncGroq(api_key=settings.GROQ_API_KEY)
-        for model_name in ["llama-3.3-70b-versatile", "llama3-8b-8192", "mixtral-8x7b-32768"]:
-            try:
-                response = await client.chat.completions.create(
-                    messages=[{"role": "user", "content": prompt}],
-                    model=model_name,
-                    stream=True,
-                )
-                has_yielded = False
-                async for chunk in response:
-                    if chunk.choices and chunk.choices[0].delta.content:
-                        has_yielded = True
-                        yield chunk.choices[0].delta.content
-                if has_yielded:
-                    return
-            except Exception as groq_m_err:
-                logger.warning(f"Groq model {model_name} failed: {groq_m_err}")
-                continue
-    except Exception as e:
-        logger.error(f"Groq API streaming failed: {e}")
+    import time
+    now = time.time()
+    if llm_breaker.state == "OPEN":
+        if now - llm_breaker.last_state_change > llm_breaker.recovery_timeout:
+            llm_breaker.state = "HALF-OPEN"
+            llm_breaker.last_state_change = now
+        else:
+            raise CircuitBreakerOpenException(
+                "llm_provider",
+                "AI service temporarily unavailable. Please try again shortly."
+            )
+
+    async with llm_breaker.semaphore:
+        try:
+            client = AsyncGroq(api_key=settings.GROQ_API_KEY)
+            for model_name in ["llama-3.3-70b-versatile", "llama3-8b-8192", "mixtral-8x7b-32768"]:
+                try:
+                    response = await client.chat.completions.create(
+                        messages=[{"role": "user", "content": prompt}],
+                        model=model_name,
+                        stream=True,
+                    )
+                    has_yielded = False
+                    async for chunk in response:
+                        if chunk.choices and chunk.choices[0].delta.content:
+                            has_yielded = True
+                            yield chunk.choices[0].delta.content
+                    if has_yielded:
+                        llm_breaker._record_success()
+                        return
+                except Exception as groq_m_err:
+                    logger.warning(f"Groq model {model_name} failed: {groq_m_err}")
+                    continue
+            llm_breaker._record_failure(Exception("All Groq models failed"))
+        except CircuitBreakerOpenException as cbo:
+            raise cbo
+        except Exception as e:
+            llm_breaker._record_failure(e)
+            logger.error(f"Groq API streaming failed: {e}")
 
     async for chunk in stream_mock(prompt):
         yield chunk
