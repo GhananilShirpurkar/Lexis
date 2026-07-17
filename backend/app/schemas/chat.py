@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # --- Citation Schemas ---
 class CitationBase(BaseModel):
-    excerpt: str = Field(..., max_length=200)
+    excerpt: str
     page_number: int | None = None
 
 class CitationCreate(CitationBase):

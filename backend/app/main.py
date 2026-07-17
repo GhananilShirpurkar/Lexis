@@ -6,6 +6,7 @@ from app.routers.documents import router as documents_router
 from app.routers.chats import router as chats_router
 from app.routers.projects import router as projects_router
 from app.routers.notifications import router as notifications_router
+from app.routers.users import router as users_router
 from app.db import base  # Register all models in SQLAlchemy registry
 
 # Initialize FastAPI application instance
@@ -21,6 +22,7 @@ app.include_router(documents_router)
 app.include_router(chats_router)
 app.include_router(projects_router)
 app.include_router(notifications_router)
+app.include_router(users_router)
 
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -59,9 +61,13 @@ async def init_db():
     # 1. Perform checking using a separate connection context (will rollback failure automatically)
     try:
         async with engine.connect() as conn:
-            # Check both users and chats tables to ensure all new fields/tables exist
-            await conn.execute(text("SELECT hashed_password FROM users LIMIT 1"))
+            # Check users, chats, and invoices tables to ensure all new fields/tables exist
+            await conn.execute(text("SELECT hashed_password, display_name, plan, settings FROM users LIMIT 1"))
             await conn.execute(text("SELECT is_unified FROM chats LIMIT 1"))
+            await conn.execute(text("SELECT id FROM invoices LIMIT 1"))
+            # Ensure citations.excerpt column type is TEXT
+            await conn.execute(text("ALTER TABLE citations ALTER COLUMN excerpt TYPE TEXT"))
+            await conn.commit()
     except Exception:
         needs_reset = True
             

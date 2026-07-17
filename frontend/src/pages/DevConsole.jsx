@@ -2,12 +2,16 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
+import NavigationBar from '../components/NavigationBar';
 
 function DevConsole() {
   const { token, logout, user } = useAuth();
   const [rateLimitLogs, setRateLimitLogs] = useState([]);
   const [testingRateLimit, setTestingRateLimit] = useState(false);
   const [lastResponse, setLastResponse] = useState(null);
+  
+  // ... rest of state and handlers ...
+
 
   const runRateLimitStressTest = async () => {
     setTestingRateLimit(true);
@@ -70,24 +74,7 @@ function DevConsole() {
 
   return (
     <div className="app-shell">
-      {/* Carbon Top Nav */}
-      <header className="nav-bar">
-        <div className="nav-logo-area">
-          <Link to="/" className="logo-pill">
-            <span>📚</span>
-            <span className="logo-wordmark">LEXIS</span>
-          </Link>
-          <nav className="nav-links">
-            <Link to="/" className="nav-link-word">Query</Link>
-            <Link to="/dev-console" className="nav-link-word active">Console</Link>
-          </nav>
-        </div>
-
-        <div className="nav-utility-area">
-          <span className="badge badge-amber">DEV MODE</span>
-          <button className="btn btn-ghost" onClick={logout} style={{ fontSize: '10px' }}>EXIT</button>
-        </div>
-      </header>
+      <NavigationBar />
 
       {/* Subnav Strip */}
       <div className="subnav-strip">

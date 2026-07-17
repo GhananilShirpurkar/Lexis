@@ -214,14 +214,18 @@ def retrieve_context(user_id: str, doc_id: str, query: str, top_k: int = 5) -> l
 def build_prompt(query: str, nodes: list) -> str:
     """
     Combines retrieved context chunks, system prompt, and user query.
+    Enforces adaptive depth, clean markdown syntax, and standard [Page X] inline citations.
     """
     system_prompt = (
-        "You are an assistant that answers questions using only the provided context. "
-        "If the context does not contain the answer, say so.\n"
-        "Citations: For every fact or statement you make, cite the source document filename and page number "
-        "if available in the context using the format: [page X] where X is the page number.\n\n"
-        "Context:\n{context}\n\n"
-        "User Query: {query}"
+        "You are Lexis, an expert precision retrieval assistant for documents.\n\n"
+        "Core Response Guidelines:\n"
+        "1. ADAPTIVE DEPTH: Analyze the user query. If it's a brief/direct question (e.g. 'what is X?', 'when does Y happen?'), provide a direct, concise 1-2 sentence response. If it's complex, architectural, or broad (e.g. 'how is X implemented?', 'summarize...'), provide a detailed, deeply technical response with section subheadings and bullet points.\n"
+        "2. FORMATTING: Use clean Markdown formatting (e.g. `### Section`, `**bold key terms**`, bullet lists). Do NOT include robotic preamble phrases like 'According to document X' or 'The document states'. Answer directly.\n"
+        "3. TYPO CORRECTION: Clean up document hyphenation artifacts or OCR errors (e.g. convert 'enhance- ments' to 'enhancements').\n"
+        "4. CITATIONS: For every claim or detail retrieved, attach an inline citation tag at the end of the sentence using the exact syntax `[Page X]` (where X is the page number from context). If multiple pages apply, use `[Page X, Y]`.\n"
+        "5. TRUTHFULNESS: Base your answers ONLY on the provided context below. If the context does not contain the answer, state: 'The provided document does not contain information to answer this query.'\n\n"
+        "Retrieved Document Context:\n{context}\n\n"
+        "User Inquiry: {query}"
     )
 
     context_str = ""
@@ -312,8 +316,10 @@ async def query(
         yield f"data: {json.dumps({'type': 'error', 'code': 'LLM_ERROR', 'message': str(exc)})}\n\n"
         return
 
-    # 5. Deduplicate and group citations by document
-    citations_by_doc = {}
+    # 5. Extract full verbatim citations per page/node
+    grouped_citations_data = []
+    seen_page_keys = set()
+
     for node in nodes:
         metadata = node.node.metadata or {}
         doc_filename = metadata.get("file_name", "document")
@@ -324,36 +330,26 @@ async def query(
             except ValueError:
                 page_num = None
 
-        excerpt = node.node.text[:200].strip()
+        full_text = node.node.text.strip()
         doc_id = chat.current_doc_id
 
-        if doc_id not in citations_by_doc:
-            citations_by_doc[doc_id] = {
-                "excerpts": [excerpt],
-                "page_numbers": {page_num} if page_num is not None else set(),
-                "doc_filename": doc_filename
-            }
+        page_key = (str(doc_id), page_num)
+        if page_key in seen_page_keys:
+            for c_item in grouped_citations_data:
+                if c_item["document_id"] == str(doc_id) and c_item["page_number"] == page_num:
+                    if full_text not in c_item["excerpt"]:
+                        c_item["excerpt"] += "\n\n" + full_text
+                    break
         else:
-            citations_by_doc[doc_id]["excerpts"].append(excerpt)
-            if page_num is not None:
-                citations_by_doc[doc_id]["page_numbers"].add(page_num)
+            seen_page_keys.add(page_key)
+            grouped_citations_data.append({
+                "document_id": str(doc_id),
+                "excerpt": full_text,
+                "page_number": page_num,
+                "doc_filename": doc_filename
+            })
 
-    grouped_citations_data = []
-    for d_id, data in citations_by_doc.items():
-        combined_excerpt = " | ".join(data["excerpts"])
-        combined_excerpt = combined_excerpt[:200].strip()
-        p_num = sorted(list(data["page_numbers"]))[0] if data["page_numbers"] else None
-        grouped_citations_data.append({
-            "document_id": str(d_id),
-            "excerpt": combined_excerpt,
-            "page_number": p_num,
-            "doc_filename": data["doc_filename"]
-        })
-
-    # Yield done chunk with citations
-    yield f"data: {json.dumps({'type': 'done', 'citations': grouped_citations_data})}\n\n"
-
-    # 6. Save messages to NeonDB atomically
+    # 6. Save messages to NeonDB atomically BEFORE yielding done event
     try:
         user_msg = Message(
             id=uuid.uuid4(),
@@ -397,6 +393,9 @@ async def query(
         logger.error(f"Error persisting conversation to database: {db_exc}")
         await db.rollback()
         raise
+
+    # 7. Yield done chunk with citations AFTER commit is guaranteed
+    yield f"data: {json.dumps({'type': 'done', 'citations': grouped_citations_data})}\n\n"
 
 
 async def query_unified(
@@ -535,17 +534,15 @@ async def query_unified(
         yield f"data: {json.dumps({'type': 'error', 'code': 'LLM_ERROR', 'message': str(exc)})}\n\n"
         return
 
-    # 6. Deduplicate and group citations by document
-    citations_by_doc = {}
+    # 6. Extract full verbatim citations per page/node
+    grouped_citations_data = []
+    seen_page_keys = set()
+
     for node in top_nodes:
         metadata = node.node.metadata or {}
         doc_filename = metadata.get("file_name", "document")
         doc_id_str = metadata.get("document_id")
         if not doc_id_str:
-            continue
-        try:
-            doc_uuid = uuid.UUID(doc_id_str)
-        except ValueError:
             continue
 
         page_num = metadata.get("page_label", metadata.get("page_num", None))
@@ -555,35 +552,25 @@ async def query_unified(
             except ValueError:
                 page_num = None
 
-        excerpt = node.node.text[:200].strip()
+        full_text = node.node.text.strip()
+        page_key = (doc_id_str, page_num)
 
-        if doc_uuid not in citations_by_doc:
-            citations_by_doc[doc_uuid] = {
-                "excerpts": [excerpt],
-                "page_numbers": {page_num} if page_num is not None else set(),
-                "doc_filename": doc_filename
-            }
+        if page_key in seen_page_keys:
+            for c_item in grouped_citations_data:
+                if c_item["document_id"] == doc_id_str and c_item["page_number"] == page_num:
+                    if full_text not in c_item["excerpt"]:
+                        c_item["excerpt"] += "\n\n" + full_text
+                    break
         else:
-            citations_by_doc[doc_uuid]["excerpts"].append(excerpt)
-            if page_num is not None:
-                citations_by_doc[doc_uuid]["page_numbers"].add(page_num)
+            seen_page_keys.add(page_key)
+            grouped_citations_data.append({
+                "document_id": doc_id_str,
+                "excerpt": full_text,
+                "page_number": page_num,
+                "doc_filename": doc_filename
+            })
 
-    grouped_citations_data = []
-    for d_uuid, data in citations_by_doc.items():
-        combined_excerpt = " | ".join(data["excerpts"])
-        combined_excerpt = combined_excerpt[:200].strip()
-        p_num = sorted(list(data["page_numbers"]))[0] if data["page_numbers"] else None
-        grouped_citations_data.append({
-            "document_id": str(d_uuid),
-            "excerpt": combined_excerpt,
-            "page_number": p_num,
-            "doc_filename": data["doc_filename"]
-        })
-
-    # Yield done chunk with citations
-    yield f"data: {json.dumps({'type': 'done', 'citations': grouped_citations_data})}\n\n"
-
-    # 7. Save messages to NeonDB atomically
+    # 7. Save messages to NeonDB atomically BEFORE yielding done event
     try:
         user_msg = Message(
             id=uuid.uuid4(),
@@ -627,4 +614,7 @@ async def query_unified(
         logger.error(f"Error persisting conversation to database: {db_exc}")
         await db.rollback()
         raise
+
+    # 8. Yield done chunk with citations AFTER commit is guaranteed
+    yield f"data: {json.dumps({'type': 'done', 'citations': grouped_citations_data})}\n\n"
 

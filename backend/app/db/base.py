@@ -8,4 +8,4 @@ from app.models.message import Message
 from app.models.citation import Citation
 from app.models.project import Project, ProjectChat
 from app.models.notification import Notification
-
+from app.models.invoice import Invoice

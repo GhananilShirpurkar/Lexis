@@ -151,14 +151,12 @@ async def test_property_21_citation_grouping():
         assert citation["doc_filename"] == "test_document.pdf"
         assert citation["page_number"] == 3
         
-        # Verify length of excerpt is <= 200 characters
-        assert len(citation["excerpt"]) <= 200
+        # Verify excerpt preserves full text
+        assert len(citation["excerpt"]) > 0
         
-        # Verify it lists all excerpts joined by ' | '
+        # Verify it lists all excerpts joined
         for txt in chunk_texts:
-            # Due to 200 char truncation, some of the last one might be sliced,
-            # but the start of it should be present or parts of them should exist.
-            assert txt[:10] in citation["excerpt"]
+            assert txt in citation["excerpt"]
             
         # Verify database persist was called
         assert mock_db.add.call_count == 3  # user message, assistant message, citation

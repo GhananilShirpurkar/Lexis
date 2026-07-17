@@ -118,3 +118,24 @@ def delete_file(r2_key: str) -> None:
         logger.error(f"Failed to delete file {r2_key} from Tigris: {e}")
         raise e
 
+def get_file_content(r2_key: str) -> bytes | None:
+    """
+    Fetches raw bytes for a file stored in Tigris/S3.
+    Returns None if client is mock or file not found.
+    """
+    client = get_r2_client()
+
+    if isinstance(client, MagicMock):
+        return None
+
+    try:
+        obj = client.get_object(
+            Bucket=settings.S3_BUCKET_NAME,
+            Key=r2_key
+        )
+        return obj['Body'].read()
+    except Exception as e:
+        logger.error(f"Failed to get file {r2_key} from Tigris: {e}")
+        return None
+
+

@@ -2,6 +2,129 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
 import apiClient from '../api/client';
+import { 
+  BookOpen, Search, Library, Terminal, Settings as SettingsIcon,
+  Plus, MessageSquare, Paperclip, ArrowRight, Upload, X, Pencil,
+  FileText, AlertTriangle, Trash2, CheckCircle, ChevronLeft, ChevronRight
+} from '../components/icons';
+
+import ProfileDropdown from '../components/ProfileDropdown';
+import AlertsDropdown from '../components/AlertsDropdown';
+import ModelSelector from '../components/ModelSelector';
+import NavigationBar from '../components/NavigationBar';
+
+const FormattedMessage = ({ content, citations, onCitationClick }) => {
+  if (!content) return null;
+
+  const citationRegex = /\[(?:Page|page|p\.)\s*(\d+(?:\s*,\s*\d+)*)\]/g;
+
+  const renderTextWithCitations = (textStr) => {
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = citationRegex.exec(textStr)) !== null) {
+      const pageStr = match[1];
+      const matchIndex = match.index;
+
+      if (matchIndex > lastIndex) {
+        parts.push(textStr.substring(lastIndex, matchIndex));
+      }
+
+      const pageNums = pageStr.split(',').map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n));
+      const targetPage = pageNums[0];
+
+      // Flexible matching for numeric page comparison
+      let matchedCitation = citations?.find(c => c.page_number !== null && Number(c.page_number) === Number(targetPage));
+      
+      // Fallback matching if page label formatting differs
+      if (!matchedCitation && citations && citations.length > 0) {
+        matchedCitation = citations[0];
+      }
+
+      const citationData = matchedCitation ? {
+        ...matchedCitation,
+        page_number: matchedCitation.page_number || targetPage
+      } : {
+        page_number: targetPage,
+        doc_filename: 'Source Document',
+        excerpt: `Full text excerpt retrieved for Page ${targetPage}.`
+      };
+
+      parts.push(
+        <button
+          key={`cit-${matchIndex}`}
+          type="button"
+          className="citation-pill"
+          title="Click to view full retrieved context excerpt"
+          onClick={() => onCitationClick(citationData)}
+        >
+          📍 Page {pageStr}
+        </button>
+      );
+
+      lastIndex = matchIndex + match[0].length;
+    }
+
+    if (lastIndex < textStr.length) {
+      parts.push(textStr.substring(lastIndex));
+    }
+
+    return parts;
+  };
+
+  const lines = content.split('\n');
+  const renderedElements = [];
+  let listItems = [];
+
+  const flushList = (key) => {
+    if (listItems.length > 0) {
+      renderedElements.push(
+        <ul key={`ul-${key}`} style={{ margin: '6px 0 10px 20px', padding: 0 }}>
+          {listItems.map((item, i) => (
+            <li key={i} style={{ marginBottom: '4px' }}>{renderTextWithCitations(item)}</li>
+          ))}
+        </ul>
+      );
+      listItems = [];
+    }
+  };
+
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith('### ')) {
+      flushList(index);
+      renderedElements.push(
+        <h3 key={index} style={{ fontSize: '15px', marginTop: '10px', marginBottom: '4px', borderBottom: '1px solid rgba(61,79,151,0.2)', paddingBottom: '2px' }}>
+          {renderTextWithCitations(trimmed.replace('### ', ''))}
+        </h3>
+      );
+    } else if (trimmed.startsWith('## ') || trimmed.startsWith('# ')) {
+      flushList(index);
+      renderedElements.push(
+        <h3 key={index} style={{ fontSize: '16px', marginTop: '12px', marginBottom: '4px' }}>
+          {renderTextWithCitations(trimmed.replace(/^#+\s+/, ''))}
+        </h3>
+      );
+    } else if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
+      listItems.push(trimmed.replace(/^[\*\-]\s+/, ''));
+    } else if (trimmed.length === 0) {
+      flushList(index);
+    } else {
+      flushList(index);
+      renderedElements.push(
+        <p key={index} style={{ margin: '4px 0', lineHeight: '1.5' }}>
+          {renderTextWithCitations(trimmed)}
+        </p>
+      );
+    }
+  });
+
+  flushList('final');
+
+  return <div className="formatted-markdown">{renderedElements}</div>;
+};
 
 const Dashboard = () => {
   const { user, logout, token } = useAuth();
@@ -10,6 +133,7 @@ const Dashboard = () => {
   const [messages, setMessages] = useState([]);
   const [citations, setCitations] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [selectedCitation, setSelectedCitation] = useState(null);
   
   // UI inputs
   const [queryText, setQueryText] = useState('');
@@ -98,10 +222,16 @@ const Dashboard = () => {
     }
   };
 
-  const handleDeleteChat = async (chatId, e) => {
+  const [deleteTargetChat, setDeleteTargetChat] = useState(null);
+
+  const onRequestDeleteChat = (chat, e) => {
     e.stopPropagation();
-    if (!confirm('Are you sure you want to delete this chat session?')) return;
-    
+    setDeleteTargetChat(chat);
+  };
+
+  const confirmDeleteChat = async () => {
+    if (!deleteTargetChat) return;
+    const chatId = deleteTargetChat.id;
     try {
       await apiClient.delete(`/chats/${chatId}`);
       const remainingChats = chats.filter(c => c.id !== chatId);
@@ -112,6 +242,8 @@ const Dashboard = () => {
       }
     } catch (err) {
       console.error('Error deleting chat:', err);
+    } finally {
+      setDeleteTargetChat(null);
     }
   };
 
@@ -265,16 +397,29 @@ const Dashboard = () => {
                 tempAnswer += data.content;
                 setStreamedResponse(tempAnswer);
               } else if (data.type === 'done') {
-                setIsGenerating(false);
-                // Refresh messages
-                const res = await apiClient.get(`/chats/${activeChat.id}/messages`);
-                setMessages(res.data);
+                const finalCitations = data.citations || [];
                 
-                // Refresh citations
-                const allCitations = res.data
-                  .filter(m => m.role === 'assistant' && m.citations)
-                  .flatMap(m => m.citations);
-                setCitations(allCitations);
+                // Immediately commit to local UI state to prevent disappearances/flicker
+                setMessages(prev => [
+                  ...prev,
+                  { role: 'assistant', content: tempAnswer, citations: finalCitations, created_at: new Date() }
+                ]);
+                setStreamedResponse('');
+                setIsGenerating(false);
+
+                // Background sync with database
+                try {
+                  const res = await apiClient.get(`/chats/${activeChat.id}/messages`);
+                  if (res.data && res.data.length > 0) {
+                    setMessages(res.data);
+                    const allCitations = res.data
+                      .filter(m => m.role === 'assistant' && m.citations)
+                      .flatMap(m => m.citations);
+                    setCitations(allCitations);
+                  }
+                } catch (syncErr) {
+                  console.error('Background sync failed:', syncErr);
+                }
               } else if (data.type === 'error') {
                 throw new Error(data.message);
               }
@@ -284,94 +429,28 @@ const Dashboard = () => {
           }
         }
       }
-    } catch (err) {
-      console.error('Error during query:', err);
-      setMessages(prev => [
-        ...prev,
-        { role: 'assistant', content: `Error: ${err.message || 'Retrieval failed.'}`, is_error: true, created_at: new Date() }
-      ]);
-    } finally {
+
       setIsGenerating(false);
+      setMessages([
+        ...newMessages,
+        { role: 'assistant', content: accumulatedText, citations: citations, created_at: new Date().toISOString() }
+      ]);
+      setStreamedResponse('');
+    } catch (err) {
+      console.error('Streaming response failed', err);
+      setIsGenerating(false);
+      setMessages([
+        ...newMessages,
+        { role: 'assistant', content: '⚠️ CONNECTION FAILURE: Unable to generate LLM response. Verify server status.', is_error: true, created_at: new Date().toISOString() }
+      ]);
       setStreamedResponse('');
     }
   };
 
   return (
     <div className="app-shell">
-      {/* 1. Carbon Top Nav Bar */}
-      <header className="nav-bar">
-        <div className="nav-logo-area">
-          <Link to="/" className="logo-pill">
-            <span style={{ fontSize: '14px' }}>📚</span>
-            <span className="logo-wordmark">LEXIS</span>
-          </Link>
+      <NavigationBar currentModel={provider} onModelChange={setProvider} />
 
-          <nav className="nav-links">
-            <Link to="/" className="nav-item active">Query</Link>
-            <a href="#library" className="nav-item" onClick={(e) => { e.preventDefault(); alert("Library view active"); }}>Library</a>
-            <Link to="/dev-console" className="nav-item">Console</Link>
-            <a href="#settings" className="nav-item" onClick={(e) => { e.preventDefault(); alert("Settings active"); }}>Settings</a>
-          </nav>
-        </div>
-
-        <div className="nav-utility-area">
-          {/* Notifications Alert Bell */}
-          <div className="notification-bell-container" style={{ position: 'relative' }}>
-            <button 
-              className="nav-badge nav-badge-alerts" 
-              onClick={() => setShowNotifications(!showNotifications)}
-              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-            >
-              🔔 ALERTS 
-              {notifications.length > 0 && (
-                <span className="badge badge-error" style={{ borderRadius: '9999px', padding: '1px 5px' }}>
-                  {notifications.length}
-                </span>
-              )}
-            </button>
-
-            {showNotifications && (
-              <div className="notifications-dropdown" style={{
-                position: 'absolute', right: 0, top: '40px', width: '280px',
-                backgroundColor: '#ffffff', border: '1px solid #3d4f97',
-                boxShadow: '0 4px 16px rgba(33,36,46,0.2)', padding: '16px', zIndex: 100, borderRadius: '4px'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #5a5f8c', paddingBottom: '8px', marginBottom: '8px', fontWeight: '700', fontSize: '12px' }}>
-                  <span>WORKSPACE ALERTS</span>
-                  <button className="btn-ghost" onClick={() => setShowNotifications(false)}>✕</button>
-                </div>
-                {notifications.length === 0 ? (
-                  <p style={{ fontSize: '12px', color: '#60619c' }}>No active document expirations.</p>
-                ) : (
-                  notifications.map(n => (
-                    <div key={n.id} style={{ padding: '8px 0', borderBottom: '1px dotted #5a5f8c' }}>
-                      <p style={{ fontSize: '12px', marginBottom: '4px' }}>{n.message}</p>
-                      <button className="btn btn-ghost" style={{ fontSize: '11px', color: '#e60012' }} onClick={(e) => handleDismissNotification(n.id, e)}>
-                        Dismiss
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-
-          <span className="nav-badge nav-badge-model">
-            {provider === 'gemini' ? 'Gemini 1.5 Flash' : 'Groq Llama 3'}
-          </span>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div className="nav-avatar">
-              {user?.email ? user.email[0].toUpperCase() : 'U'}
-            </div>
-            <button className="btn btn-ghost" onClick={logout} style={{ fontSize: '11px' }} title="Log Out">
-              EXIT
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* 2. Secondary Subnav Strip */}
       <div className="subnav-strip">
         <div className="subnav-links" style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
           <span className="subnav-item"><span className="label">SYSTEM:</span> <span className="value">READY</span></span>
@@ -379,24 +458,26 @@ const Dashboard = () => {
           <span className="subnav-item"><span className="label">SESSION:</span> <span className="value">{activeChat ? (activeChat.display_name || activeChat.title) : 'NONE'}</span></span>
         </div>
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-          <span className="subnav-item"><span className="value online">● ONLINE</span></span>
-          <Link to="/dev-console" className="subnav-item" style={{ textDecoration: 'none', color: '#f68d1f', fontWeight: '700' }}>DEV CONSOLE →</Link>
+          <span className="subnav-item"><span className="value online status-led online">● ONLINE</span></span>
+          <Link to="/dev-console" className="subnav-item" style={{ textDecoration: 'none', color: '#f68d1f', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span>DEV CONSOLE</span>
+            <ArrowRight className="icon-small" />
+          </Link>
         </div>
       </div>
 
-      {/* 3. Main Workspace Grid */}
       <div className="workspace-layout">
-        {/* Sidebar Rail */}
         <aside className={`sidebar-panel ${sidebarOpen ? '' : 'collapsed'}`}>
           <div className="sidebar-section-header">
             <span>{sidebarOpen && "SESSION HISTORY"}</span>
             <button className="btn-ghost" onClick={() => setSidebarOpen(!sidebarOpen)} title="Toggle Rail">
-              {sidebarOpen ? "◀" : "▶"}
+              {sidebarOpen ? <ChevronLeft className="icon" /> : <ChevronRight className="icon" />}
             </button>
           </div>
 
           <button className="sidebar-new-session-btn" onClick={handleCreateChat}>
-            <span>+</span> NEW SESSION
+            <Plus className="icon-small" />
+            <span>NEW SESSION</span>
           </button>
 
           {sidebarOpen && (
@@ -410,37 +491,29 @@ const Dashboard = () => {
                     className={`sidebar-session-item ${activeChat?.id === chat.id ? 'active' : ''}`}
                     onClick={() => selectChat(chat)}
                   >
-                    <span className="session-item-icon">💬</span>
+                    <MessageSquare className="icon-small" />
                     <span className="session-item-name">
                       {chat.display_name || chat.title}
                     </span>
                     <button 
-                      className="btn-ghost" 
-                      onClick={(e) => handleDeleteChat(chat.id, e)}
-                      style={{ fontSize: '11px', padding: '2px 4px' }}
+                      className="btn-ghost delete-session-btn" 
+                      onClick={(e) => onRequestDeleteChat(chat, e)}
+                      title="Delete Session"
+                      style={{ padding: '2px 4px', opacity: 0.7, transition: 'all 0.2s', display: 'flex', alignItems: 'center' }}
                     >
-                      ✕
+                      <Trash2 className="icon-small" />
                     </button>
                   </div>
                 ))
               )}
             </div>
           )}
-
-          {sidebarOpen && (
-            <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid #5a5f8c', fontSize: '11px', color: '#21242e', fontFamily: 'Arial, Helvetica, sans-serif', fontWeight: '700' }}>
-              <div>USER: {user?.email}</div>
-              <div style={{ marginTop: '4px', opacity: 0.8 }}>ROLE: WORKSPACE ADM</div>
-            </div>
-          )}
         </aside>
 
-        {/* Central Chat Feed */}
         <main className="main-content-area">
-          {/* Header Strip for Active Session */}
           <div className="section-label-bar">
             <div className="label-title">
-              <span style={{ fontSize: '16px' }}>🖥️</span>
+              <Terminal className="icon" />
               {isRenaming ? (
                 <form onSubmit={handleRenameChat} style={{ display: 'inline-flex', gap: '8px' }}>
                   <input 
@@ -456,36 +529,30 @@ const Dashboard = () => {
                   <button type="button" className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => setIsRenaming(false)}>CANCEL</button>
                 </form>
               ) : (
-                <span onClick={() => activeChat && setIsRenaming(true)} style={{ cursor: 'pointer' }}>
+                <span onClick={() => activeChat && setIsRenaming(true)} style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}>
                   {activeChat ? (activeChat.display_name || activeChat.title) : 'SELECT OR CREATE SESSION'}
-                  {activeChat && <span style={{ opacity: 0.6, marginLeft: '8px', fontSize: '11px' }}>✏️ RENAME</span>}
+                  {activeChat && (
+                    <span style={{ opacity: 0.6, marginLeft: '8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <Pencil className="icon-small" /> RENAME
+                    </span>
+                  )}
                 </span>
               )}
             </div>
 
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-              <select 
-                className="select-dropdown" 
-                value={provider} 
-                onChange={(e) => setProvider(e.target.value)}
-                style={{ height: '32px', fontSize: '11px', width: '150px' }}
-              >
-                <option value="gemini">Gemini 1.5 Flash</option>
-                <option value="groq">Groq Llama 3</option>
-              </select>
-
               <button 
                 className="btn btn-primary" 
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
-                style={{ fontSize: '11px', padding: '6px 12px' }}
+                style={{ fontSize: '11px', padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
               >
-                {isUploading ? 'INDEXING...' : '📎 ATTACH DOC'}
+                <Paperclip className="icon-small" />
+                <span>{isUploading ? 'INDEXING...' : 'ATTACH DOC'}</span>
               </button>
             </div>
           </div>
 
-          {/* Hidden File Input */}
           <input 
             type="file" 
             ref={fileInputRef} 
@@ -494,7 +561,6 @@ const Dashboard = () => {
             accept=".pdf,.docx,.txt"
           />
 
-          {/* Feedback Banners */}
           {isUploading && (
             <div style={{ padding: '12px 24px', backgroundColor: '#dedede', color: '#21242e', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', fontWeight: '700', borderBottom: '1px solid #3d4f97' }}>
               <div className="spinner"></div>
@@ -503,18 +569,19 @@ const Dashboard = () => {
           )}
 
           {uploadError && (
-            <div style={{ padding: '12px 24px', backgroundColor: 'rgba(230,0,18,0.1)', color: '#e60012', borderBottom: '1px solid #e60012', fontWeight: '700', fontSize: '12px' }}>
-              ⚠️ UPLOAD ERROR: {uploadError}
+            <div style={{ padding: '12px 24px', backgroundColor: 'rgba(230,0,18,0.1)', color: '#e60012', borderBottom: '1px solid #e60012', fontWeight: '700', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertTriangle className="icon" />
+              <span>UPLOAD ERROR: {uploadError}</span>
             </div>
           )}
 
           {uploadSuccess && (
-            <div style={{ padding: '12px 24px', backgroundColor: 'rgba(22,163,74,0.1)', color: '#16a34a', borderBottom: '1px solid #16a34a', fontWeight: '700', fontSize: '12px' }}>
-              ✓ INDEX VERIFIED: {uploadSuccess}
+            <div style={{ padding: '12px 24px', backgroundColor: 'rgba(22,163,74,0.1)', color: '#16a34a', borderBottom: '1px solid #16a34a', fontWeight: '700', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <CheckCircle className="icon" />
+              <span>INDEX VERIFIED: {uploadSuccess}</span>
             </div>
           )}
 
-          {/* Empty State Hero */}
           {messages.length === 0 && !streamedResponse && (
             <div className="empty-state-hero">
               <h1 className="empty-state-wordmark">LEXIS</h1>
@@ -529,7 +596,7 @@ const Dashboard = () => {
                 onDrop={handleDrop}
               >
                 <div className="upload-zone-icon">
-                  ▲
+                  <Upload className="icon-large" />
                 </div>
                 <div className="upload-zone-text">
                   DRAG & DROP PDF, DOCX, TXT FILES HERE OR <span style={{ color: '#f68d1f' }}>CLICK TO BROWSE</span>
@@ -541,7 +608,6 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* Messages Stream Feed */}
           {messages.length > 0 && (
             <div className="chat-feed">
               {messages.map((m, idx) => (
@@ -549,18 +615,29 @@ const Dashboard = () => {
                   key={idx} 
                   className={`message-bubble ${m.role === 'user' ? 'message-bubble-user' : m.is_error ? 'message-bubble-error' : 'message-bubble-assistant'}`}
                 >
-                  <div style={{ marginBottom: '6px', whiteSpace: 'pre-wrap' }}>{m.content}</div>
-                  <div style={{ fontSize: '10px', opacity: 0.7, textTransform: 'uppercase', textAlign: m.role === 'user' ? 'right' : 'left' }}>
+                  {m.role === 'user' || m.is_error ? (
+                    <div style={{ marginBottom: '6px', whiteSpace: 'pre-wrap' }}>{m.content}</div>
+                  ) : (
+                    <FormattedMessage 
+                      content={m.content} 
+                      citations={m.citations || citations} 
+                      onCitationClick={(cit) => setSelectedCitation(cit)} 
+                    />
+                  )}
+                  <div style={{ fontSize: '10px', opacity: 0.7, textTransform: 'uppercase', textAlign: m.role === 'user' ? 'right' : 'left', marginTop: '6px' }}>
                     {m.provider ? `${m.provider.toUpperCase()} • ` : ''}
                     {new Date(m.created_at).toLocaleTimeString()}
                   </div>
                 </div>
               ))}
 
-              {/* Streaming Live Response */}
               {streamedResponse && (
                 <div className="message-bubble message-bubble-assistant">
-                  <div style={{ whiteSpace: 'pre-wrap' }}>{streamedResponse}</div>
+                  <FormattedMessage 
+                    content={streamedResponse} 
+                    citations={citations} 
+                    onCitationClick={(cit) => setSelectedCitation(cit)} 
+                  />
                   <span className="streaming-cursor">█</span>
                 </div>
               )}
@@ -568,8 +645,14 @@ const Dashboard = () => {
               {isGenerating && !streamedResponse && (
                 <div className="message-bubble message-bubble-assistant">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div className="spinner"></div>
-                    <span style={{ fontSize: '12px', fontWeight: '700' }}>SEARCHING VECTOR INDEX & STREAMING RESPONSE...</span>
+                    <div className="thinking-indicator">
+                      <div className="thinking-dot"></div>
+                      <div className="thinking-dot"></div>
+                      <div className="thinking-dot"></div>
+                    </div>
+                    <span style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '0.5px' }}>
+                      SEARCHING VECTOR INDEX & GENERATING RESPONSE...
+                    </span>
                   </div>
                 </div>
               )}
@@ -578,15 +661,14 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* Sticky Input Bar */}
           <div className="chat-input-bar">
             <form onSubmit={handleSendQuery} className="chat-input-wrapper">
               <textarea 
                 className="chat-textarea"
-                placeholder={activeChat?.current_doc_id ? "Type your query or instruction..." : "Attach a document to begin querying..."}
+                placeholder={activeChat ? "Type your query or instruction..." : "Attach a document to begin querying..."}
                 value={queryText}
                 onChange={(e) => setQueryText(e.target.value)}
-                disabled={!activeChat?.current_doc_id || isGenerating}
+                disabled={!activeChat || isGenerating}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -599,56 +681,90 @@ const Dashboard = () => {
                 className="chat-submit-btn"
                 disabled={!queryText.trim() || isGenerating}
               >
-                ➔
+                <ArrowRight className="icon" />
               </button>
             </form>
           </div>
         </main>
-
-        {/* Right Rail: Citations & Context */}
-        <aside className="right-rail-panel">
-          <div className="right-rail-section">
-            <div className="right-rail-section-header">
-              <div className="section-header-title">
-                <span>📑</span>
-                <span>RETRIEVED CONTEXT</span>
-              </div>
-              <span className="section-header-badge">{citations.length} SNIPPETS</span>
-            </div>
-
-            <div className="right-rail-section-body">
-              {citations.length === 0 ? (
-                <p style={{ fontSize: '12px', color: '#60619c', lineHeight: '1.5', margin: 0, fontStyle: 'italic' }}>
-                  No search snippets retrieved yet. Submit a query to display page quotes and verbatim document excerpts.
-                </p>
-              ) : (
-                citations.map((c, idx) => (
-                  <div key={idx} className="citation-card">
-                    <span className="citation-file">📄 {c.doc_filename || 'source document'}</span>
-                    <div className="citation-meta">
-                      {c.page_number && <span className="citation-badge citation-badge-page">PAGE {c.page_number}</span>}
-                      <span className="citation-badge citation-badge-match">MATCH VERIFIED</span>
-                    </div>
-                    <p className="citation-excerpt">"{c.excerpt}"</p>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Info Explainer Card */}
-          <div className="info-box" style={{ marginTop: 'auto' }}>
-            <div className="info-box-header">
-              SOURCE CITATION ENGINE
-            </div>
-            <div className="info-box-body">
-              Lexis builds vector index embeddings for uploaded documents. Every LLM response is grounded with verbatim source excerpts to eliminate hallucination.
-            </div>
-          </div>
-        </aside>
       </div>
 
-      {/* 4. Footer Bar */}
+      {selectedCitation && (
+        <div className="modal-backdrop" onClick={() => setSelectedCitation(null)}>
+          <div className="modal-content major-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <FileText className="icon-large" />
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '14px', color: '#ffffff', textTransform: 'uppercase' }}>
+                    {selectedCitation.doc_filename || 'Source Document'}
+                  </h4>
+                  {selectedCitation.page_number && (
+                    <span className="citation-badge citation-badge-page" style={{ marginTop: '4px', display: 'inline-block' }}>
+                      PAGE {selectedCitation.page_number}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button className="icon-btn" onClick={() => setSelectedCitation(null)} style={{ background: 'none', border: 'none', color: '#9fbee7', fontSize: '18px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                <X className="icon" />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '16px', backgroundColor: '#dedede', color: '#21242e', borderRadius: '4px', fontFamily: 'monospace', fontSize: '13px', lineHeight: '1.6', whiteSpace: 'pre-wrap', maxHeight: '320px', overflowY: 'auto', border: '1px solid #3d4f97' }}>
+              "{selectedCitation.excerpt || selectedCitation.content || 'Retrieved context node from vector index.'}"
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px' }}>
+              <span style={{ fontSize: '11px', color: '#9fbee7', fontFamily: 'VT323, monospace' }}>
+                VERIFIED RAG SOURCE CONTEXT
+              </span>
+              <button className="nav-btn primary" onClick={() => setSelectedCitation(null)}>
+                Close Preview
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTargetChat && (
+        <div className="modal-backdrop" onClick={() => setDeleteTargetChat(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px', border: '1px solid #e60012', boxShadow: '0 8px 32px rgba(230,0,18,0.25)' }}>
+            <div className="modal-header" style={{ borderBottom: '1px solid #e60012', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertTriangle className="icon" style={{ color: '#e60012' }} />
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '14px', letterSpacing: '0.05em', color: '#e60012', fontWeight: '800' }}>CONFIRM SESSION DELETION</h3>
+                  <span style={{ fontSize: '11px', color: '#9fbee7', textTransform: 'uppercase' }}>
+                    SESSION ID: {deleteTargetChat.id.substring(0, 13)}...
+                  </span>
+                </div>
+              </div>
+              <button className="icon-btn" onClick={() => setDeleteTargetChat(null)} style={{ background: 'none', border: 'none', color: '#9fbee7', fontSize: '18px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                <X className="icon" />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '16px 0', color: '#dedede', fontSize: '13px', lineHeight: '1.5' }}>
+              Are you sure you want to permanently delete session <strong style={{ color: '#ecab37' }}>"{deleteTargetChat.display_name || deleteTargetChat.title}"</strong>? All associated query message history will be removed from memory.
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', paddingTop: '12px', borderTop: '1px solid #3d4f97' }}>
+              <button className="btn btn-secondary" onClick={() => setDeleteTargetChat(null)} style={{ fontSize: '12px', padding: '6px 14px' }}>
+                Cancel
+              </button>
+              <button 
+                className="btn" 
+                onClick={confirmDeleteChat}
+                style={{ backgroundColor: '#e60012', color: '#ffffff', border: '1px solid #ff3344', fontWeight: '700', fontSize: '12px', padding: '6px 16px', borderRadius: '4px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(230,0,18,0.4)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Trash2 className="icon-small" />
+                <span>Delete Session</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <footer className="footer-bar">
         <div>© 2026 LEXIS CORP • CONSOLE CHROME ENGINE</div>
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
