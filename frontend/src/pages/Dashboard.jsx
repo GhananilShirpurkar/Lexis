@@ -594,6 +594,9 @@ const Dashboard = () => {
 
   const selectChat = async (chat) => {
     setActiveChat(chat);
+    if (window.innerWidth < 640) {
+      setSidebarOpen(false);
+    }
     setRenamingChatId(null);
     setMessages([]);
     setCitations([]);
@@ -999,7 +1002,7 @@ const Dashboard = () => {
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
       />
 
-      <div className="workspace-layout">
+      <div className={`workspace-layout ${activeChat ? 'has-active-chat' : ''}`}>
         {/* Mobile sidebar backdrop */}
         {sidebarOpen && (
           <div 
@@ -1220,6 +1223,18 @@ const Dashboard = () => {
         <main className="main-content-area">
           {/* Clean chat header — name only, attach doc in corner */}
           <div className="section-label-bar">
+            {activeChat && (
+              <button 
+                type="button" 
+                className="btn-ghost mobile-back-btn md:hidden"
+                onClick={() => setActiveChat(null)}
+                title="Back to session list"
+                aria-label="Back to session list"
+                style={{ marginRight: '8px', padding: '4px', color: 'var(--color-ink)', display: 'flex', alignItems: 'center' }}
+              >
+                <ChevronLeft className="icon" />
+              </button>
+            )}
             <div className="label-title" style={{ overflow: 'hidden' }}>
               <span style={{
                 overflow: 'hidden',

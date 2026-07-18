@@ -3656,7 +3656,7 @@ html, body, #root {
   margin-top: var(--space-2xl);
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1023px) {
   .profile-layout-grid {
     grid-template-columns: 1fr;
   }
