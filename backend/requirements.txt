@@ -7,7 +7,7 @@ python-jose[cryptography]
 passlib[bcrypt]
 boto3
 llama-index
-google-generativeai
+google-genai>=0.3.0
 groq
 apscheduler
 pydantic
