@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://lexis-api-cp2a.onrender.com/api/$1"
+      "destination": "https://lexis-api-cp2a.onrender.com/$1"
     },
     {
       "source": "/(.*)",
