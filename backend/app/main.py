@@ -135,10 +135,14 @@ async def init_db():
 
 # Configure CORS origins
 # React + Vite development server usually runs on http://localhost:5173
+from app.config import settings
+
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
+if settings.CORS_ORIGINS:
+    origins.extend([o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()])
 
 from app.middleware.compression import SelectiveGZipMiddleware
 
@@ -164,15 +168,32 @@ async def health_check(request: Request):
     """
     from app.core.circuit_breaker import tavily_breaker, llm_breaker, storage_breaker
     from app.cache import cache
+    from app.db.session import AsyncSessionLocal
+    from sqlalchemy import text
 
     breakers = [tavily_breaker, llm_breaker, storage_breaker]
     all_open = all(b.state == "OPEN" for b in breakers)
     redis_connected = await cache.ping()
+
+    db_connected = False
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute(text("SELECT 1"))
+            db_connected = True
+    except Exception:
+        pass
+    
+    status_str = "healthy"
+    if all_open or not redis_connected or not db_connected:
+        status_str = "degraded"
     
     return {
-        "status": "degraded" if all_open else "healthy",
+        "status": status_str,
         "app": "Lexis RAG API",
         "version": "1.0.0",
+        "database": {
+            "connected": db_connected
+        },
         "cache": {
             "redis_connected": redis_connected
         },

@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GROQ_API_KEY: str = ""
 
+    # CORS configuration
+    CORS_ORIGINS: str = ""
+
     # Tavily Web Search configuration
     TAVILY_API_KEY: str = ""
     TAVILY_MAX_RESULTS: int = 3
