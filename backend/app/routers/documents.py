@@ -2,7 +2,7 @@ import uuid
 import os
 import shutil
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Form, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Form, Response, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -15,6 +15,7 @@ from app.rag.pipeline import index_document
 from app.schemas.document import DocumentResponse, DocumentUpdate
 from app.config import settings
 from app.core.caching import invalidate_public_library
+from app.documents.summarizer import generate_document_summary
 
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
@@ -28,6 +29,7 @@ router = APIRouter(prefix="/documents", tags=["Documents"])
 )
 async def upload_document(
     request: Request,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     chat_id: str | None = Form(None),
     db: AsyncSession = Depends(get_db)
@@ -130,24 +132,24 @@ async def upload_document(
 
         if chat:
             chat.current_doc_id = doc_id
+            chat.summary_status = "generating"
             
-            # Update chat title if it's the default name
+            # Initial name fallback is filename
             if chat.title == "New Chat":
-                # Requirement 8.3: Derive chat title from summary
-                summary = pipeline_result["summary"]
-                derived_title = ""
-                if summary:
-                    first_sentence = summary.split(".")[0].strip()
-                    if 0 < len(first_sentence) <= 60:
-                        derived_title = first_sentence
-                
-                if not derived_title:
-                    derived_title = file.filename
-                    if len(derived_title) > 60:
-                        derived_title = derived_title[:60]
+                derived_title = file.filename
+                if len(derived_title) > 60:
+                    derived_title = derived_title[:60]
                 chat.title = derived_title
 
         await db.commit()
+        if chat:
+            background_tasks.add_task(
+                generate_document_summary,
+                chat.id,
+                doc_id,
+                file.filename,
+                pipeline_result["text"]
+            )
     except Exception as db_exc:
         # Rollback db session
         await db.rollback()

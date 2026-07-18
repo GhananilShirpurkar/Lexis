@@ -49,6 +49,10 @@ class ChatBase(BaseModel):
     current_doc_id: uuid.UUID | None = None
     display_name: str | None = None
     original_name: str | None = None
+    user_edited_title: str | None = None
+    generated_title: str | None = None
+    generated_summary: str | None = None
+    summary_status: str = "pending"
 
 class ChatCreate(BaseModel):
     title: str | None = Field(None, max_length=60, description="Auto-generated if not provided")
@@ -59,6 +63,7 @@ class ChatUpdate(BaseModel):
     display_name: str | None = Field(None, min_length=1, max_length=100)
     current_doc_id: uuid.UUID | None = None
     last_provider: str | None = Field(None, max_length=50)
+    user_edited_title: str | None = None
 
 class ChatResponse(ChatBase):
     id: uuid.UUID

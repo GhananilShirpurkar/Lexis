@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { optimisticUpdate, shakeElement } from '../utils/optimistic';
-import { Link } from 'react-router-dom';
+import { optimisticUpdate } from '../utils/optimistic';
 import apiClient from '../api/client';
 import { 
-  BookOpen, Search, Library, Terminal, Settings as SettingsIcon,
-  Plus, MessageSquare, Paperclip, ArrowRight, Upload, X, Pencil,
+  Terminal, Plus, MessageSquare, Paperclip, ArrowRight, Upload, X, Pencil,
   FileText, AlertTriangle, Trash2, CheckCircle, ChevronLeft, ChevronRight,
-  Globe, ExternalLink, FolderPlus, Users, Folder, ChevronDown, Sparkles
+  Globe, ExternalLink, FolderPlus, Folder, ChevronDown, Sparkles
 } from '../components/icons';
 
 import ProfileDropdown from '../components/ProfileDropdown';
@@ -28,9 +26,259 @@ const FormattedMessage = ({ content, citations, onCitationClick }) => {
   );
 };
 
+const getChatTitle = (chat) => {
+  if (!chat) return 'New Chat';
+  return chat.user_edited_title || chat.generated_title || chat.display_name || chat.title || 'New Chat';
+};
+
+const DocumentOverview = ({ activeChat, onRegenerate }) => {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const status = activeChat.summary_status || 'pending';
+  const summary = activeChat.generated_summary;
+  const title = activeChat.generated_title;
+
+  if (status === 'not_applicable') return null;
+
+  return (
+    <div 
+      className="document-overview-card" 
+      style={{
+        margin: '16px 24px',
+        background: 'rgba(255, 255, 255, 0.03)',
+        backdropFilter: 'blur(12px)',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        borderRadius: '12px',
+        padding: '16px',
+        boxShadow: '0 4px 30px rgba(0, 0, 0, 0.2)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px'
+      }}
+    >
+      <div 
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          cursor: 'pointer',
+          userSelect: 'none'
+        }}
+        onClick={() => setIsCollapsed(!isCollapsed)}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div 
+            style={{
+              padding: '6px',
+              borderRadius: '8px',
+              backgroundColor: 'rgba(246, 141, 31, 0.1)',
+              color: '#f68d1f',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <FileText className="icon-small" />
+          </div>
+          <div>
+            <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--color-ink)' }}>
+              Document Overview
+            </div>
+            {title && (
+              <div style={{ fontSize: '11px', color: 'var(--color-body-mid)', marginTop: '2px' }}>
+                AI Refined Title: <span style={{ fontWeight: '500', color: 'var(--color-ink)' }}>{title}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }} onClick={e => e.stopPropagation()}>
+          {status === 'generating' && (
+            <span 
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '11px',
+                padding: '3px 8px',
+                borderRadius: '12px',
+                backgroundColor: 'rgba(246, 141, 31, 0.15)',
+                color: '#f68d1f',
+                fontWeight: '500'
+              }}
+            >
+              <div 
+                className="pulse-dot" 
+                style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  backgroundColor: '#f68d1f'
+                }}
+              />
+              Generating Summary...
+            </span>
+          )}
+          {status === 'completed' && (
+            <span 
+              style={{
+                fontSize: '11px',
+                padding: '3px 8px',
+                borderRadius: '12px',
+                backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                color: 'var(--color-accent-green)',
+                fontWeight: '500'
+              }}
+            >
+              Ready
+            </span>
+          )}
+          {status === 'failed' && (
+            <span 
+              style={{
+                fontSize: '11px',
+                padding: '3px 8px',
+                borderRadius: '12px',
+                backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                color: 'var(--color-error)',
+                fontWeight: '500'
+              }}
+            >
+              Generation Failed
+            </span>
+          )}
+          {status === 'pending' && (
+            <span 
+              style={{
+                fontSize: '11px',
+                padding: '3px 8px',
+                borderRadius: '12px',
+                backgroundColor: 'var(--color-canvas-soft)',
+                color: 'var(--color-body-mid)',
+                fontWeight: '500'
+              }}
+            >
+              Queued
+            </span>
+          )}
+
+          <button 
+            className="btn-ghost" 
+            style={{ padding: '4px', color: 'var(--color-body-mid)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onClick={() => setIsCollapsed(!isCollapsed)}
+          >
+            {isCollapsed ? <ChevronDown className="icon-small" /> : <ChevronLeft className="icon-small" style={{ transform: 'rotate(-90deg)' }} />}
+          </button>
+        </div>
+      </div>
+
+      {!isCollapsed && (
+        <div 
+          style={{
+            borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+            paddingTop: '12px',
+            fontSize: '13px',
+            lineHeight: '1.6',
+            color: 'var(--color-body)'
+          }}
+        >
+          {status === 'generating' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ height: '14px', width: '100%', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', animation: 'skeleton-pulse 1.5s infinite' }}></div>
+              <div style={{ height: '14px', width: '85%', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', animation: 'skeleton-pulse 1.5s infinite' }}></div>
+              <div style={{ height: '14px', width: '60%', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', animation: 'skeleton-pulse 1.5s infinite' }}></div>
+            </div>
+          )}
+          {status === 'pending' && (
+            <div style={{ color: 'var(--color-body-mid)', fontStyle: 'italic' }}>
+              Summary request has been queued and will begin shortly...
+            </div>
+          )}
+          {status === 'failed' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ color: 'var(--color-error)' }}>
+                {summary || "An error occurred while generating the document overview summary."}
+              </div>
+              <button 
+                className="btn-ghost"
+                onClick={onRegenerate}
+                style={{
+                  alignSelf: 'flex-start',
+                  fontSize: '12px',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  color: 'var(--color-ink)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Sparkles className="icon-tiny" />
+                Retry Summary Generation
+              </button>
+            </div>
+          )}
+          {status === 'completed' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ whiteSpace: 'pre-wrap', color: 'var(--color-body)' }}>{summary}</div>
+              <div 
+                style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center', 
+                  borderTop: '1px solid rgba(255,255,255,0.04)',
+                  paddingTop: '10px',
+                  marginTop: '4px'
+                }}
+              >
+                <span style={{ fontSize: '11px', color: 'var(--color-body-mid)' }}>
+                  Auto-named based on analyzed themes.
+                </span>
+                <button 
+                  className="btn-ghost"
+                  onClick={(e) => { e.stopPropagation(); onRegenerate(); }}
+                  style={{
+                    fontSize: '11px',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    color: 'var(--color-body-mid)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    cursor: 'pointer'
+                  }}
+                  title="Regenerate the overview summary and chat title using LLM"
+                >
+                  <Sparkles className="icon-tiny" />
+                  Regenerate
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Dashboard = () => {
   const { user, token } = useAuth();
   const { toast } = useToast();
+
+  // Relative time helper
+  const formatRelativeTime = (dateStr) => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days === 1) return 'Yesterday';
+    if (days < 7) return `${days}d ago`;
+    return new Date(dateStr).toLocaleDateString();
+  };
 
   // Core data states
   const [chats, setChats] = useState([]);
@@ -38,7 +286,6 @@ const Dashboard = () => {
   const [messages, setMessages] = useState([]);
   const [citations, setCitations] = useState([]);
   const [notifications, setNotifications] = useState([]);
-  const [projects, setProjects] = useState([]);
 
   // Workspace states
   const [workspaces, setWorkspaces] = useState([]);
@@ -49,14 +296,20 @@ const Dashboard = () => {
   const [selectedChatIds, setSelectedChatIds] = useState([]);
   const [isSubmittingWorkspace, setIsSubmittingWorkspace] = useState(false);
 
-  // Active citation modal state
-  const [selectedCitation, setSelectedCitation] = useState(null);
+  // New session upload modal state
+  const [showNewSessionModal, setShowNewSessionModal] = useState(false);
+  const [newSessionDragging, setNewSessionDragging] = useState(false);
+
+  // Sidebar inline rename state
+  const [renamingChatId, setRenamingChatId] = useState(null);
+  const [renamingValue, setRenamingValue] = useState('');
+
+  // Right panel citation state
+  const [citationPanel, setCitationPanel] = useState(null); // null or citation object
 
   // Form states
   const [queryText, setQueryText] = useState('');
   const [provider, setProvider] = useState('gemini');
-  const [isRenaming, setIsRenaming] = useState(false);
-  const [renameValue, setRenameValue] = useState('');
 
   // Upload state
   const [isUploading, setIsUploading] = useState(false);
@@ -82,17 +335,16 @@ const Dashboard = () => {
 
   // DOM Refs for target shake animations
   const fileInputRef = useRef(null);
+  const newSessionFileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
   const newChatBtnRef = useRef(null);
   const sidebarSessionListRef = useRef(null);
   const alertsDropdownRef = useRef(null);
-  const projectListRef = useRef(null);
 
   // Load initial data
   useEffect(() => {
     fetchChats();
     fetchNotifications();
-    fetchProjects();
     fetchWorkspaces();
     fetchSettings();
   }, []);
@@ -101,6 +353,126 @@ const Dashboard = () => {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamedResponse]);
+
+  // Handle mobile screen resize auto-collapsing sidebar
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setSidebarOpen(false);
+      } else {
+        setSidebarOpen(true);
+      }
+    };
+    handleResize(); // run initially
+    window.addEventListener('resize', handleResize);
+  }, []);
+
+  // SSE Event Listener for Active Chat Summary & Status Updates
+  useEffect(() => {
+    if (!activeChat || !activeChat.id || !activeChat.current_doc_id) return;
+    
+    let isSubscribed = true;
+    let controller = new AbortController();
+    
+    const connectToEvents = async () => {
+      try {
+        const response = await fetch(`/api/chats/${activeChat.id}/events`, {
+          signal: controller.signal,
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to subscribe to chat events');
+        }
+        
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+        
+        while (isSubscribed) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          // Save the last partial line back to the buffer
+          buffer = lines.pop() || '';
+          
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('data: ')) {
+              try {
+                const eventData = JSON.parse(trimmed.substring(6));
+                if (eventData.type === 'summary_ready' || eventData.type === 'initial') {
+                  if (!isSubscribed) break;
+                  
+                  // Update activeChat summary and title fields in state
+                  setActiveChat(prev => {
+                    if (!prev || prev.id !== activeChat.id) return prev;
+                    return {
+                      ...prev,
+                      summary_status: eventData.summary_status,
+                      generated_summary: eventData.generated_summary,
+                      generated_title: eventData.generated_title
+                    };
+                  });
+                  
+                  // Also update it in the sidebar list of chats
+                  setChats(prevChats => 
+                    prevChats.map(c => 
+                      c.id === activeChat.id 
+                        ? {
+                            ...c,
+                            summary_status: eventData.summary_status,
+                            generated_summary: eventData.generated_summary,
+                            generated_title: eventData.generated_title
+                          }
+                        : c
+                    )
+                  );
+                }
+              } catch (e) {
+                console.error('Error parsing SSE event data:', e);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.error('SSE Connection Error:', err);
+          // Retry after 5 seconds if still subscribed
+          setTimeout(() => {
+            if (isSubscribed) connectToEvents();
+          }, 5000);
+        }
+      }
+    };
+    
+    connectToEvents();
+    
+    return () => {
+      isSubscribed = false;
+      controller.abort();
+    };
+  }, [activeChat?.id, activeChat?.current_doc_id, token]);
+
+  const handleRegenerateSummary = async () => {
+    if (!activeChat) return;
+    try {
+      // Set status to generating locally for immediate UI feedback
+      setActiveChat(prev => ({ ...prev, summary_status: 'generating' }));
+      setChats(prev => prev.map(c => c.id === activeChat.id ? { ...c, summary_status: 'generating' } : c));
+
+      await apiClient.post(`/chats/${activeChat.id}/regenerate-summary`);
+      toast?.success?.('Summary regeneration triggered.');
+    } catch (err) {
+      console.error('Error regenerating summary:', err);
+      toast?.error?.(err.response?.data?.detail?.error?.message || 'Failed to regenerate summary');
+      fetchChats();
+    }
+  };
 
   const getBubblePadding = (role) => {
     if (density === 'compact') {
@@ -145,15 +517,6 @@ const Dashboard = () => {
       setNotifications(res.data.filter(n => !n.is_read));
     } catch (err) {
       console.error('Error fetching notifications:', err);
-    }
-  };
-
-  const fetchProjects = async () => {
-    try {
-      const res = await apiClient.get('/projects');
-      setProjects(res.data || []);
-    } catch (err) {
-      console.error('Error fetching projects:', err);
     }
   };
 
@@ -231,11 +594,11 @@ const Dashboard = () => {
 
   const selectChat = async (chat) => {
     setActiveChat(chat);
-    setRenameValue(chat.display_name || chat.title);
-    setIsRenaming(false);
+    setRenamingChatId(null);
     setMessages([]);
     setCitations([]);
     setStreamedResponse('');
+    setCitationPanel(null);
 
     if (chat.isOptimistic) return;
 
@@ -253,43 +616,10 @@ const Dashboard = () => {
   };
 
   /**
-   * Action 1: New Chat Initialization (Optimistic)
+   * Action 1: New Session — opens upload modal instead of blank chat
    */
-  const handleCreateChat = async () => {
-    const tempId = `temp-chat-${crypto.randomUUID()}`;
-    const previousChats = [...chats];
-    const previousActiveChat = activeChat;
-    const tempChat = {
-      id: tempId,
-      title: 'New Chat',
-      display_name: 'New Chat',
-      created_at: new Date().toISOString(),
-      isOptimistic: true
-    };
-
-    await optimisticUpdate({
-      optimisticFn: () => {
-        setChats([tempChat, ...chats]);
-        setActiveChat(tempChat);
-        setMessages([]);
-        setCitations([]);
-        setStreamedResponse('');
-      },
-      apiCall: async () => {
-        const res = await apiClient.post('/chats', { title: 'New Chat' });
-        const realChat = res.data;
-        setChats(prev => prev.map(c => c.id === tempId ? realChat : c));
-        setActiveChat(realChat);
-        return realChat;
-      },
-      rollbackFn: () => {
-        setChats(previousChats);
-        setActiveChat(previousActiveChat);
-      },
-      errorMessage: "⚠️ Couldn't create chat session. Please retry.",
-      targetRef: newChatBtnRef,
-      toast
-    });
+  const handleCreateChat = () => {
+    setShowNewSessionModal(true);
   };
 
   const [deleteTargetChat, setDeleteTargetChat] = useState(null);
@@ -329,37 +659,46 @@ const Dashboard = () => {
         setChats(previousChats);
         setActiveChat(previousActiveChat);
       },
-      errorMessage: `⚠️ Couldn't delete session "${targetChat.display_name || targetChat.title}". Restored.`,
+      errorMessage: `⚠️ Couldn't delete session "${getChatTitle(targetChat)}". Restored.`,
       targetRef: sidebarSessionListRef,
       toast
     });
   };
 
-  const handleRenameChat = async (e) => {
-    e.preventDefault();
-    if (!renameValue.trim() || renameValue.length > 60 || !activeChat) return;
+  /**
+   * Sidebar inline rename
+   */
+  const startSidebarRename = (chat, e) => {
+    e.stopPropagation();
+    setRenamingChatId(chat.id);
+    setRenamingValue(getChatTitle(chat));
+  };
+
+  const handleSidebarRename = async (chat, e) => {
+    e?.preventDefault();
+    const newName = renamingValue.trim();
+    if (!newName || newName.length > 60) { setRenamingChatId(null); return; }
 
     const previousChats = [...chats];
     const previousActiveChat = activeChat;
-    const newName = renameValue.trim();
 
     await optimisticUpdate({
       optimisticFn: () => {
-        const updatedChat = { ...activeChat, display_name: newName };
-        setChats(chats.map(c => c.id === activeChat.id ? updatedChat : c));
-        setActiveChat(updatedChat);
-        setIsRenaming(false);
+        const updatedChat = { ...chat, display_name: newName };
+        setChats(chats.map(c => c.id === chat.id ? updatedChat : c));
+        if (activeChat?.id === chat.id) setActiveChat(updatedChat);
+        setRenamingChatId(null);
       },
       apiCall: async () => {
-        const res = await apiClient.patch(`/chats/${activeChat.id}`, { display_name: newName });
-        setChats(prev => prev.map(c => c.id === activeChat.id ? res.data : c));
-        setActiveChat(res.data);
+        const res = await apiClient.patch(`/chats/${chat.id}`, { display_name: newName });
+        setChats(prev => prev.map(c => c.id === chat.id ? res.data : c));
+        if (activeChat?.id === chat.id) setActiveChat(res.data);
       },
       rollbackFn: () => {
         setChats(previousChats);
         setActiveChat(previousActiveChat);
       },
-      errorMessage: `⚠️ Couldn't rename session. Restored original title.`,
+      errorMessage: `⚠️ Couldn't rename session. Restored.`,
       targetRef: sidebarSessionListRef,
       toast
     });
@@ -388,64 +727,6 @@ const Dashboard = () => {
     });
   };
 
-  /**
-   * Action 4: Project Chat Membership Add/Remove (Optimistic)
-   */
-  const handleAddChatToProject = async (projectId, chatId) => {
-    const previousProjects = [...projects];
-
-    await optimisticUpdate({
-      optimisticFn: () => {
-        setProjects(prev => prev.map(p => {
-          if (p.id === projectId) {
-            return {
-              ...p,
-              chat_ids: p.chat_ids ? [...p.chat_ids, chatId] : [chatId]
-            };
-          }
-          return p;
-        }));
-      },
-      apiCall: async () => {
-        const res = await apiClient.post(`/projects/${projectId}/chats`, { chat_id: chatId });
-        setProjects(prev => prev.map(p => p.id === projectId ? res.data : p));
-      },
-      rollbackFn: () => {
-        setProjects(previousProjects);
-      },
-      errorMessage: "⚠️ Couldn't add chat to project. Restored.",
-      targetRef: projectListRef,
-      toast
-    });
-  };
-
-  const handleRemoveChatFromProject = async (projectId, chatId) => {
-    const previousProjects = [...projects];
-
-    await optimisticUpdate({
-      optimisticFn: () => {
-        setProjects(prev => prev.map(p => {
-          if (p.id === projectId) {
-            return {
-              ...p,
-              chat_ids: (p.chat_ids || []).filter(id => id !== chatId)
-            };
-          }
-          return p;
-        }));
-      },
-      apiCall: async () => {
-        await apiClient.delete(`/projects/${projectId}/chats/${chatId}`);
-      },
-      rollbackFn: () => {
-        setProjects(previousProjects);
-      },
-      errorMessage: "⚠️ Couldn't remove chat from project. Restored.",
-      targetRef: projectListRef,
-      toast
-    });
-  };
-
   const processFileUpload = async (file) => {
     if (!file) return;
 
@@ -462,6 +743,7 @@ const Dashboard = () => {
         const newChat = createRes.data;
         setChats(prev => [newChat, ...prev]);
         setActiveChat(newChat);
+        selectChat(newChat);
         targetChat = newChat;
       } catch (chatErr) {
         console.error('Failed to auto-create chat session:', chatErr);
@@ -485,10 +767,14 @@ const Dashboard = () => {
       });
       setUploadSuccess(`Indexed successfully: ${res.data.filename}`);
       
-      // Update active chat to reflect linked document
+      // Update active chat to reflect linked document — use doc filename as session name
       const updatedChatRes = await apiClient.get(`/chats/${targetChat.id}`);
-      setChats(prevChats => prevChats.map(c => c.id === targetChat.id ? updatedChatRes.data : c));
-      setActiveChat(updatedChatRes.data);
+      const updatedChat = {
+        ...updatedChatRes.data,
+        display_name: updatedChatRes.data.display_name || res.data.filename || updatedChatRes.data.title
+      };
+      setChats(prevChats => prevChats.map(c => c.id === targetChat.id ? updatedChat : c));
+      setActiveChat(updatedChat);
       
       // Fetch fresh notifications in case there's warning update
       fetchNotifications();
@@ -508,6 +794,54 @@ const Dashboard = () => {
     const file = e.target.files?.[0];
     if (file) {
       processFileUpload(file);
+    }
+  };
+
+  // New session flow: always creates a fresh chat then uploads
+  const handleNewSessionUpload = async (file) => {
+    if (!file) return;
+    setIsUploading(true);
+    setUploadError('');
+    setUploadSuccess('');
+
+    let newChat;
+    try {
+      const createRes = await apiClient.post('/chats', { title: file.name || 'New Session' });
+      newChat = createRes.data;
+      setChats(prev => [newChat, ...prev]);
+      setActiveChat(newChat);
+      selectChat(newChat);
+    } catch (chatErr) {
+      setUploadError(chatErr.response?.data?.detail?.error?.message || 'Could not create session.');
+      setIsUploading(false);
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('chat_id', newChat.id);
+
+    try {
+      const res = await apiClient.post('/documents/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      const updatedChatRes = await apiClient.get(`/chats/${newChat.id}`);
+      const updatedChat = {
+        ...updatedChatRes.data,
+        display_name: updatedChatRes.data.display_name || res.data.filename || updatedChatRes.data.title
+      };
+      setChats(prev => prev.map(c => c.id === newChat.id ? updatedChat : c));
+      setActiveChat(updatedChat);
+      setUploadSuccess(`${res.data.filename}`);
+      setShowNewSessionModal(false);
+      fetchNotifications();
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setUploadError(typeof detail === 'string' ? detail : detail?.error?.message || 'Indexing failed.');
+    } finally {
+      setIsUploading(false);
+      if (newSessionFileInputRef.current) newSessionFileInputRef.current.value = '';
     }
   };
 
@@ -661,25 +995,29 @@ const Dashboard = () => {
         onModelChange={setProvider} 
         customNotifications={notifications}
         onCustomDismiss={handleDismissNotification}
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
       />
 
-      <div className="subnav-strip">
-        <div className="subnav-links" style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-          <span className="subnav-item"><span className="label">SYSTEM:</span> <span className="value">READY</span></span>
-          <span style={{ color: '#3d4f97' }}>|</span>
-          <span className="subnav-item"><span className="label">SESSION:</span> <span className="value">{activeChat ? (activeChat.display_name || activeChat.title) : 'NONE'}</span></span>
-        </div>
-        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-          <span className="subnav-item"><span className="value online status-led online">● ONLINE</span></span>
-          <Link to="/dev-console" className="subnav-item" style={{ textDecoration: 'none', color: '#f68d1f', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span>DEV CONSOLE</span>
-            <ArrowRight className="icon-small" />
-          </Link>
-        </div>
-      </div>
-
       <div className="workspace-layout">
-        <aside className={`sidebar-panel ${sidebarOpen ? '' : 'collapsed'}`}>
+        {/* Mobile sidebar backdrop */}
+        {sidebarOpen && (
+          <div 
+            className="sidebar-mobile-backdrop md:hidden"
+            onClick={() => setSidebarOpen(false)}
+            aria-hidden="true"
+            style={{
+              position: 'fixed',
+              inset: 0,
+              top: '60px',
+              backgroundColor: 'rgba(0, 0, 0, 0.4)',
+              backdropFilter: 'blur(2px)',
+              zIndex: 85,
+            }}
+          />
+        )}
+
+        <aside className={`sidebar-panel ${sidebarOpen ? 'open-mobile' : 'collapsed'}`}>
           <div className="sidebar-section-header">
             <span>{sidebarOpen && "SESSION HISTORY"}</span>
             <button className="btn-ghost" onClick={() => setSidebarOpen(!sidebarOpen)} title="Toggle Rail">
@@ -713,29 +1051,66 @@ const Dashboard = () => {
           {sidebarOpen && (
             <div ref={sidebarSessionListRef} className="sidebar-session-list">
               {chats.filter(c => !c.is_workspace_chat).length === 0 ? (
-                <div className="sidebar-empty">NO SESSIONS STORED</div>
+                <div className="sidebar-empty">No sessions yet. Start with "+ New Session" above.</div>
               ) : (
                 chats.filter(c => !c.is_workspace_chat).map(chat => (
-                  <div 
-                    key={chat.id} 
-                    className={`sidebar-session-item ${activeChat?.id === chat.id ? 'active' : ''} ${chat.isOptimistic ? 'is-optimistic' : ''}`}
-                    onClick={() => selectChat(chat)}
+                  <div
+                    key={chat.id}
+                    className={`sidebar-session-item ${activeChat?.id === chat.id ? 'active' : ''} ${chat.isOptimistic ? 'is-optimistic' : ''} sidebar-session-item-hoverable`}
+                    onClick={() => renamingChatId !== chat.id && selectChat(chat)}
                   >
-                    <MessageSquare className="icon-small" />
-                    <span className="session-item-name">
-                      {chat.display_name || chat.title}
-                    </span>
-                    {chat.isOptimistic ? (
-                      <span style={{ fontSize: '10px', opacity: 0.6, fontStyle: 'italic', marginLeft: 'auto' }}>CREATING...</span>
-                    ) : (
-                      <button 
-                        className="btn-ghost delete-session-btn" 
-                        onClick={(e) => onRequestDeleteChat(chat, e)}
-                        title="Delete Session"
-                        style={{ padding: '2px 4px', opacity: 0.7, transition: 'all 0.2s', display: 'flex', alignItems: 'center' }}
+                    {renamingChatId === chat.id ? (
+                      <form
+                        onSubmit={(e) => handleSidebarRename(chat, e)}
+                        style={{ flex: 1, display: 'flex', gap: '4px', alignItems: 'center' }}
+                        onClick={e => e.stopPropagation()}
                       >
-                        <Trash2 className="icon-small" />
-                      </button>
+                        <input
+                          autoFocus
+                          className="text-input"
+                          value={renamingValue}
+                          onChange={e => setRenamingValue(e.target.value)}
+                          maxLength={60}
+                          style={{ flex: 1, height: '26px', fontSize: '12px', padding: '2px 8px' }}
+                          onBlur={() => setRenamingChatId(null)}
+                          onKeyDown={e => e.key === 'Escape' && setRenamingChatId(null)}
+                        />
+                        <button type="submit" className="btn-ghost" style={{ color: 'var(--color-accent-green)', padding: '2px' }} title="Save">✓</button>
+                      </form>
+                    ) : (
+                      <>
+                        <MessageSquare className="icon-small" style={{ flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div className="session-item-name">{getChatTitle(chat)}</div>
+                          {chat.created_at && (
+                            <div style={{ fontSize: '10px', color: 'var(--color-body-mid)', marginTop: '1px' }}>
+                              {formatRelativeTime(chat.created_at)}
+                            </div>
+                          )}
+                        </div>
+                        {chat.isOptimistic ? (
+                          <span style={{ fontSize: '10px', opacity: 0.6, fontStyle: 'italic', flexShrink: 0 }}>creating...</span>
+                        ) : (
+                          <div className="sidebar-item-actions">
+                            <button
+                              className="btn-ghost"
+                              onClick={(e) => startSidebarRename(chat, e)}
+                              title="Rename"
+                              style={{ padding: '2px', color: 'var(--color-body-mid)' }}
+                            >
+                              <Pencil className="icon-tiny" />
+                            </button>
+                            <button
+                              className="btn-ghost"
+                              onClick={(e) => onRequestDeleteChat(chat, e)}
+                              title="Delete"
+                              style={{ padding: '2px', color: 'var(--color-body-mid)' }}
+                            >
+                              <Trash2 className="icon-tiny" />
+                            </button>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 ))
@@ -753,7 +1128,7 @@ const Dashboard = () => {
 
               <div className="sidebar-session-list">
                 {workspaces.length === 0 ? (
-                  <div className="sidebar-empty">NO WORKSPACES CREATED</div>
+                  <div className="sidebar-empty">NO WORKSPACES ACTIVE</div>
                 ) : (
                   workspaces.map(ws => {
                     const isCollapsed = collapsedWorkspaces.has(ws.id);
@@ -814,7 +1189,7 @@ const Dashboard = () => {
                               >
                                 <Sparkles className="icon-small" style={{ color: 'var(--color-ink)' }} />
                                 <span className="session-item-name" style={{ color: 'var(--color-ink)' }}>
-                                  {ws.workspace_chat.display_name || ws.workspace_chat.title}
+                                  {getChatTitle(ws.workspace_chat)}
                                 </span>
                               </div>
                             )}
@@ -827,7 +1202,7 @@ const Dashboard = () => {
                                 onClick={() => selectChat(mChat)}
                               >
                                 <FileText className="icon-tiny" style={{ color: 'var(--color-body-mid)' }} />
-                                <span className="session-item-name">{mChat.display_name || mChat.title}</span>
+                                <span className="session-item-name">{getChatTitle(mChat)}</span>
                               </div>
                             ))}
                           </div>
@@ -840,101 +1215,26 @@ const Dashboard = () => {
             </div>
           )}
 
-          {sidebarOpen && (
-            <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid #3d4f97' }}>
-              <div className="sidebar-section-header" style={{ marginBottom: '8px' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', color: '#ecab37' }}>
-                  <FolderPlus className="icon-small" /> PROJECTS ({projects.length})
-                </span>
-              </div>
-              <div ref={projectListRef} className="sidebar-session-list">
-                {projects.length === 0 ? (
-                  <div className="sidebar-empty">NO PROJECTS ACTIVE</div>
-                ) : (
-                  projects.map(proj => {
-                    const isChatMember = activeChat && proj.chat_ids && proj.chat_ids.includes(activeChat.id);
-                    return (
-                      <div key={proj.id} style={{ padding: '8px', marginBottom: '6px', backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: '4px', border: '1px solid rgba(61,79,151,0.4)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', fontWeight: '700', color: '#9fbee7' }}>
-                          <span>{proj.name}</span>
-                          <span style={{ fontSize: '10px', opacity: 0.7 }}>{proj.chat_ids?.length || 0}/4 CHATS</span>
-                        </div>
-                        {activeChat && !activeChat.isOptimistic && (
-                          <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'flex-end' }}>
-                            {isChatMember ? (
-                              <button 
-                                className="btn btn-secondary" 
-                                style={{ fontSize: '10px', padding: '2px 6px', color: '#e60012', borderColor: '#e60012' }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRemoveChatFromProject(proj.id, activeChat.id);
-                                }}
-                              >
-                                Remove Current Chat
-                              </button>
-                            ) : (
-                              <button 
-                                className="btn btn-secondary" 
-                                style={{ fontSize: '10px', padding: '2px 6px', color: '#ecab37', borderColor: '#ecab37' }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleAddChatToProject(proj.id, activeChat.id);
-                                }}
-                              >
-                                + Add Current Chat
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          )}
         </aside>
 
         <main className="main-content-area">
+          {/* Clean chat header — name only, attach doc in corner */}
           <div className="section-label-bar">
-            <div className="label-title">
-              <Terminal className="icon" />
-              {isRenaming ? (
-                <form onSubmit={handleRenameChat} style={{ display: 'inline-flex', gap: '8px' }}>
-                  <input 
-                    type="text" 
-                    className="text-input"
-                    value={renameValue} 
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    maxLength={60}
-                    style={{ height: '28px', fontSize: '12px' }}
-                    autoFocus
-                  />
-                  <button type="submit" className="btn btn-submit" style={{ padding: '4px 10px', fontSize: '11px' }}>SAVE</button>
-                  <button type="button" className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => setIsRenaming(false)}>CANCEL</button>
-                </form>
-              ) : (
-                <span onClick={() => activeChat && setIsRenaming(true)} style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}>
-                  {activeChat ? (activeChat.display_name || activeChat.title) : 'SELECT OR CREATE SESSION'}
-                  {activeChat && (
-                    <span style={{ opacity: 0.6, marginLeft: '8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                      <Pencil className="icon-small" /> RENAME
-                    </span>
-                  )}
-                </span>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-              <button 
-                className="btn btn-primary" 
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isUploading}
-                style={{ fontSize: '11px', padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-              >
-                <Paperclip className="icon-small" />
-                <span>{isUploading ? 'INDEXING...' : 'ATTACH DOC'}</span>
-              </button>
+            <div className="label-title" style={{ overflow: 'hidden' }}>
+              <span style={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                maxWidth: '100%',
+                fontFamily: 'var(--font-sans)',
+                fontWeight: 400,
+                fontSize: '14px',
+                letterSpacing: 0,
+                textTransform: 'none',
+                color: 'var(--color-ink)',
+              }}>
+                {activeChat ? getChatTitle(activeChat) : 'Select or start a session'}
+              </span>
             </div>
           </div>
 
@@ -947,27 +1247,28 @@ const Dashboard = () => {
           />
 
           {isUploading && (
-            <div style={{ padding: '12px 24px', backgroundColor: '#dedede', color: '#21242e', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', fontWeight: '700', borderBottom: '1px solid #3d4f97' }}>
+            <div style={{ padding: '12px 24px', backgroundColor: 'var(--color-canvas-soft)', color: 'var(--color-body)', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', borderBottom: '1px solid var(--color-hairline)' }}>
               <div className="spinner"></div>
-              <span>COMPILING VECTOR EMBEDDINGS & INDEXING SOURCE FILE...</span>
+              <span>Indexing document — building vector embeddings...</span>
             </div>
           )}
 
           {uploadError && (
-            <div style={{ padding: '12px 24px', backgroundColor: 'rgba(230,0,18,0.1)', color: '#e60012', borderBottom: '1px solid #e60012', fontWeight: '700', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ padding: '12px 24px', backgroundColor: 'rgba(239,68,68,0.08)', color: 'var(--color-error)', borderBottom: '1px solid rgba(239,68,68,0.25)', fontWeight: '600', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <AlertTriangle className="icon" />
-              <span>UPLOAD ERROR: {uploadError}</span>
+              <span>Upload failed: {uploadError}</span>
             </div>
           )}
 
           {uploadSuccess && (
-            <div style={{ padding: '12px 24px', backgroundColor: 'rgba(22,163,74,0.1)', color: '#16a34a', borderBottom: '1px solid #16a34a', fontWeight: '700', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ padding: '12px 24px', backgroundColor: 'rgba(16,185,129,0.08)', color: 'var(--color-accent-green)', borderBottom: '1px solid rgba(16,185,129,0.25)', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <CheckCircle className="icon" />
-              <span>INDEX VERIFIED: {uploadSuccess}</span>
+              <span>Document indexed: {uploadSuccess}</span>
             </div>
           )}
 
-          {messages.length === 0 && !streamedResponse && (
+          {/* Empty State Hero - shown only if no messages and no document has been uploaded yet */}
+          {!activeChat?.current_doc_id && messages.length === 0 && !streamedResponse && (
             <div className="empty-state-hero">
               <h1 className="empty-state-wordmark">LEXIS</h1>
               <p className="empty-state-tagline">
@@ -993,8 +1294,16 @@ const Dashboard = () => {
             </div>
           )}
 
-          {messages.length > 0 && (
+          {/* Chat Feed Area - shown if there are messages or a document has been uploaded */}
+          {(messages.length > 0 || streamedResponse || activeChat?.current_doc_id) && (
             <div className="chat-feed">
+              {activeChat?.current_doc_id && (
+                <DocumentOverview 
+                  activeChat={activeChat} 
+                  onRegenerate={handleRegenerateSummary}
+                />
+              )}
+
               {messages.map((m, idx) => (
                 <div 
                   key={idx} 
@@ -1017,7 +1326,7 @@ const Dashboard = () => {
                     <FormattedMessage 
                       content={m.content} 
                       citations={m.citations || citations} 
-                      onCitationClick={(cit) => setSelectedCitation(cit)} 
+                      onCitationClick={(cit) => setCitationPanel(cit)} 
                     />
                   )}
                   <div style={{ fontSize: '10px', opacity: 0.7, textTransform: 'uppercase', textAlign: m.role === 'user' ? 'right' : 'left', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
@@ -1077,7 +1386,7 @@ const Dashboard = () => {
                   <FormattedMessage 
                     content={streamedResponse} 
                     citations={citations} 
-                    onCitationClick={(cit) => setSelectedCitation(cit)} 
+                    onCitationClick={(cit) => setCitationPanel(cit)} 
                   />
                   <span className="streaming-cursor">█</span>
                 </div>
@@ -1148,71 +1457,169 @@ const Dashboard = () => {
             </form>
           </div>
         </main>
+
+        {/* ── Citation Sibling Panel (compresses chat feed on desktop) ──────── */}
+        <aside
+          className={`citation-panel ${citationPanel ? 'open-mobile' : 'collapsed'}`}
+          role="complementary"
+          aria-label="Citation source panel"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--color-hairline)', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <FileText className="icon-small" style={{ color: 'var(--color-body-mid)' }} />
+              <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-ink)' }}>Source</span>
+            </div>
+            <button className="btn-ghost" onClick={() => setCitationPanel(null)} aria-label="Close source panel">
+              <X className="icon-small" />
+            </button>
+          </div>
+
+          {citationPanel && (
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+              <div style={{ marginBottom: '12px' }}>
+                <p style={{ margin: 0, fontSize: '13px', fontWeight: 500, color: 'var(--color-ink)', wordBreak: 'break-word' }}>
+                  {citationPanel.doc_filename || citationPanel.document_name || 'Source Document'}
+                </p>
+                {citationPanel.page_number && (
+                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: 'var(--color-body-mid)', fontFamily: 'var(--font-mono)' }}>
+                    Page {citationPanel.page_number}
+                  </p>
+                )}
+              </div>
+              <div style={{
+                backgroundColor: 'var(--color-canvas-soft)',
+                border: '1px solid var(--color-hairline)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '12px',
+                fontSize: '13px',
+                color: 'var(--color-body)',
+                lineHeight: 1.6,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}>
+                {citationPanel.excerpt || citationPanel.content || 'No excerpt available for this citation.'}
+              </div>
+            </div>
+          )}
+        </aside>
       </div>
 
-      {selectedCitation && (
-        <div className="modal-backdrop" onClick={() => setSelectedCitation(null)}>
-          <div className="modal-container modal-md" onClick={(e) => e.stopPropagation()}>
+      {/* Mobile-only citation backdrop overlay with blur/dim */}
+      {citationPanel && (
+        <div
+          className="citation-mobile-backdrop md:hidden"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            top: '60px',
+            backgroundColor: 'rgba(0, 0, 0, 0.4)',
+            backdropFilter: 'blur(2px)',
+            zIndex: 92,
+          }}
+          onClick={() => setCitationPanel(null)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Desktop click-outside overlay */}
+      {citationPanel && (
+        <div
+          className="citation-desktop-backdrop hidden md:block"
+          style={{ position: 'fixed', inset: 0, zIndex: 39 }}
+          onClick={() => setCitationPanel(null)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* ── New Session Upload Modal ─────────────────────────────────────── */}
+      {showNewSessionModal && (
+        <div className="modal-backdrop" onClick={() => !isUploading && setShowNewSessionModal(false)}>
+          <div className="modal-content modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-                <FileText className="icon" style={{ color: 'var(--color-ink)' }} />
-                <div>
-                  <h4 className="modal-title" style={{ margin: 0, fontSize: '15px' }}>
-                    {selectedCitation.doc_filename || 'Source Document'}
-                  </h4>
-                  {selectedCitation.source_chat && (
-                    <div style={{ fontSize: '11px', color: 'var(--color-body-mid)', fontWeight: 600, marginTop: '2px', letterSpacing: '0.5px' }}>
-                      SOURCE CHAT: {selectedCitation.source_chat}
-                    </div>
-                  )}
-                  {selectedCitation.page_number && (
-                    <span className="citation-badge citation-badge-page" style={{ marginTop: '4px', display: 'inline-block' }}>
-                      PAGE {selectedCitation.page_number}
-                    </span>
-                  )}
-                </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Upload className="icon text-muted" />
+                <h3 className="modal-title">New Session</h3>
               </div>
-              <button className="modal-close-btn" onClick={() => setSelectedCitation(null)}>
+              <button className="modal-close-btn" onClick={() => !isUploading && setShowNewSessionModal(false)}>
                 <X className="icon" />
               </button>
             </div>
 
-            <div className="modal-body" style={{ padding: 'var(--space-md)', backgroundColor: 'var(--color-canvas-soft)', color: 'var(--color-ink)', borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-mono)', fontSize: '13px', lineHeight: '1.6', whiteSpace: 'pre-wrap', maxHeight: '320px', overflowY: 'auto', border: '1px solid var(--color-hairline-translucent)' }}>
-              "{selectedCitation.excerpt || selectedCitation.content || 'Retrieved context node from vector index.'}"
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-body)', lineHeight: 1.5 }}>
+                Upload a document to start a new session. The document will be indexed for semantic search and cited answers.
+              </p>
+
+              <div
+                className="empty-state-upload-zone"
+                style={{ padding: '32px 24px', cursor: isUploading ? 'not-allowed' : 'pointer', opacity: isUploading ? 0.6 : 1 }}
+                onClick={() => !isUploading && newSessionFileInputRef.current?.click()}
+                onDragOver={e => { e.preventDefault(); setNewSessionDragging(true); }}
+                onDragLeave={() => setNewSessionDragging(false)}
+                onDrop={e => {
+                  e.preventDefault();
+                  setNewSessionDragging(false);
+                  const file = e.dataTransfer.files?.[0];
+                  if (file && !isUploading) handleNewSessionUpload(file);
+                }}
+              >
+                {isUploading ? (
+                  <>
+                    <div className="spinner" style={{ marginBottom: '8px' }} />
+                    <div className="upload-zone-text">Indexing document…</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="upload-zone-icon">
+                      <Upload className="icon-large" />
+                    </div>
+                    <div className="upload-zone-text">Drag & drop or click to browse</div>
+                    <div className="upload-zone-hint">PDF, DOCX, TXT · up to 50 MB</div>
+                  </>
+                )}
+              </div>
+
+              {uploadError && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 'var(--radius-sm)', fontSize: '12px', color: 'var(--color-error)' }}>
+                  <AlertTriangle className="icon-small" />
+                  <span>{uploadError}</span>
+                </div>
+              )}
             </div>
 
-            <div className="modal-footer" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '11px', color: 'var(--color-body-mid)', fontFamily: 'var(--font-mono)' }}>
-                VERIFIED RAG SOURCE CONTEXT
-              </span>
-              <button className="btn btn-primary" onClick={() => setSelectedCitation(null)}>
-                Close Preview
+            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: 'var(--space-lg) var(--space-xl)', borderTop: '1px solid var(--color-hairline)' }}>
+              <button className="btn outline-btn" onClick={() => !isUploading && setShowNewSessionModal(false)} disabled={isUploading}>
+                Cancel
               </button>
             </div>
           </div>
         </div>
       )}
+      <input
+        type="file"
+        ref={newSessionFileInputRef}
+        style={{ display: 'none' }}
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleNewSessionUpload(f); }}
+        accept=".pdf,.docx,.txt"
+      />
 
+      {/* ── Workspace Modal ──────────────────────────────────────────────── */}
       {(showCreateWorkspaceModal || showEditWorkspaceModal) && (
         <div className="modal-backdrop" onClick={() => { setShowCreateWorkspaceModal(false); setShowEditWorkspaceModal(null); }}>
-          <div className="modal-container modal-sm" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-container modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-                <FolderPlus className="icon" style={{ color: 'var(--color-ink)' }} />
+                <FolderPlus className="icon" />
                 <div>
-                  <h3 className="modal-title" style={{ margin: 0, fontSize: '16px', color: 'var(--color-ink)' }}>
-                    {showEditWorkspaceModal ? 'EDIT WORKSPACE' : 'CREATE WORKSPACE'}
+                  <h3 className="modal-title" style={{ margin: 0, fontSize: '16px' }}>
+                    {showEditWorkspaceModal ? 'Edit Workspace' : 'Create Workspace'}
                   </h3>
                   <span style={{ fontSize: '12px', color: 'var(--color-body-mid)' }}>
-                    Combine up to 4 chats into a unified knowledge base
+                    Combine up to 4 sessions into a unified knowledge base
                   </span>
                 </div>
               </div>
-              <button 
-                type="button"
-                className="modal-close-btn" 
-                onClick={() => { setShowCreateWorkspaceModal(false); setShowEditWorkspaceModal(null); }}
-              >
+              <button type="button" className="modal-close-btn" onClick={() => { setShowCreateWorkspaceModal(false); setShowEditWorkspaceModal(null); }}>
                 <X className="icon" />
               </button>
             </div>
@@ -1220,15 +1627,13 @@ const Dashboard = () => {
             <form onSubmit={showEditWorkspaceModal ? handleUpdateWorkspace : handleCreateWorkspace}>
               <div className="modal-body">
                 <div>
-                  <label className="form-label" style={{ display: 'block', marginBottom: 'var(--space-xs)' }}>
-                    WORKSPACE NAME
-                  </label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    placeholder="e.g. Q3 Financial Audit" 
-                    value={workspaceName} 
-                    onChange={(e) => setWorkspaceName(e.target.value)}
+                  <label className="form-label" style={{ display: 'block', marginBottom: 'var(--space-xs)' }}>Workspace name</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. Q3 Financial Audit"
+                    value={workspaceName}
+                    onChange={e => setWorkspaceName(e.target.value)}
                     required
                     style={{ width: '100%' }}
                     autoFocus
@@ -1237,72 +1642,27 @@ const Dashboard = () => {
 
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-xs)' }}>
-                    <label className="form-label">
-                      SELECT MEMBER CHATS ({selectedChatIds.length}/4)
-                    </label>
-                    {selectedChatIds.length >= 4 && (
-                      <span style={{ fontSize: '11px', color: 'var(--color-error)' }}>Max limit reached</span>
-                    )}
+                    <label className="form-label">Sessions ({selectedChatIds.length}/4)</label>
+                    {selectedChatIds.length >= 4 && <span style={{ fontSize: '11px', color: 'var(--color-error)' }}>Max reached</span>}
                   </div>
-
-                  <div style={{ 
-                    maxHeight: '220px', 
-                    overflowY: 'auto', 
-                    border: '1px solid var(--color-hairline-translucent)', 
-                    borderRadius: 'var(--radius-sm)', 
-                    backgroundColor: 'var(--color-canvas-soft)', 
-                    padding: 'var(--space-xs)' 
-                  }}>
+                  <div style={{ maxHeight: '220px', overflowY: 'auto', border: '1px solid var(--color-hairline-translucent)', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--color-canvas-soft)', padding: 'var(--space-xs)' }}>
                     {chats.filter(c => !c.is_workspace_chat).length === 0 ? (
                       <div style={{ padding: 'var(--space-md)', textAlign: 'center', fontSize: '12px', color: 'var(--color-body-mid)' }}>
-                        No chats available. Create individual chats first to add them to a workspace.
+                        No sessions available yet.
                       </div>
                     ) : (
                       chats.filter(c => !c.is_workspace_chat).map(c => {
                         const isSelected = selectedChatIds.includes(c.id);
                         const isDisabled = !isSelected && selectedChatIds.length >= 4;
-
-                        const toggleSelect = () => {
-                          if (isSelected) {
-                            setSelectedChatIds(prev => prev.filter(id => id !== c.id));
-                          } else if (!isDisabled) {
-                            setSelectedChatIds(prev => [...prev, c.id]);
-                          }
+                        const toggle = () => {
+                          if (isSelected) setSelectedChatIds(prev => prev.filter(id => id !== c.id));
+                          else if (!isDisabled) setSelectedChatIds(prev => [...prev, c.id]);
                         };
-
                         return (
-                          <div 
-                            key={c.id} 
-                            onClick={toggleSelect}
-                            style={{ 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              justify: 'space-between', 
-                              padding: '8px 12px', 
-                              marginBottom: 'var(--space-xxs)', 
-                              borderRadius: 'var(--radius-pill)', 
-                              backgroundColor: isSelected ? 'var(--color-hairline)' : 'transparent',
-                              border: '1px solid',
-                              borderColor: isSelected ? 'var(--color-hairline-translucent)' : 'transparent',
-                              cursor: isDisabled ? 'not-allowed' : 'pointer',
-                              opacity: isDisabled ? 0.4 : 1,
-                              transition: 'all 150ms ease'
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-                              <input 
-                                type="checkbox" 
-                                checked={isSelected} 
-                                onChange={toggleSelect}
-                                disabled={isDisabled}
-                                style={{ cursor: isDisabled ? 'not-allowed' : 'pointer', accentColor: 'var(--color-primary)' }}
-                              />
-                              <span style={{ fontSize: '13px', color: isSelected ? 'var(--color-ink)' : 'var(--color-body)', fontWeight: 400 }}>
-                                {c.display_name || c.title}
-                              </span>
-                            </div>
-                            <span style={{ fontSize: '11px', color: 'var(--color-body-mid)' }}>
-                              {c.current_doc_id ? '📄 Attached' : 'No doc'}
+                          <div key={c.id} onClick={toggle} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', padding: '8px 12px', marginBottom: 'var(--space-xxs)', borderRadius: 'var(--radius-pill)', backgroundColor: isSelected ? 'var(--color-hairline)' : 'transparent', border: `1px solid ${isSelected ? 'var(--color-hairline-translucent)' : 'transparent'}`, cursor: isDisabled ? 'not-allowed' : 'pointer', opacity: isDisabled ? 0.4 : 1, transition: 'all 150ms ease' }}>
+                            <input type="checkbox" checked={isSelected} onChange={toggle} disabled={isDisabled} style={{ cursor: isDisabled ? 'not-allowed' : 'pointer', accentColor: 'var(--color-primary)', flexShrink: 0 }} />
+                            <span style={{ fontSize: '13px', color: isSelected ? 'var(--color-ink)' : 'var(--color-body)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {getChatTitle(c)}
                             </span>
                           </div>
                         );
@@ -1313,20 +1673,10 @@ const Dashboard = () => {
               </div>
 
               <div className="modal-footer">
-                <button 
-                  type="button" 
-                  className="btn outline-btn" 
-                  onClick={() => { setShowCreateWorkspaceModal(false); setShowEditWorkspaceModal(null); }}
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit" 
-                  className="btn btn-primary" 
-                  disabled={!workspaceName.trim() || isSubmittingWorkspace}
-                >
+                <button type="button" className="btn outline-btn" onClick={() => { setShowCreateWorkspaceModal(false); setShowEditWorkspaceModal(null); }}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={!workspaceName.trim() || isSubmittingWorkspace}>
                   <FolderPlus className="icon-small" />
-                  <span>{isSubmittingWorkspace ? 'SAVING...' : (showEditWorkspaceModal ? 'Update Workspace' : 'Create Workspace')}</span>
+                  <span>{isSubmittingWorkspace ? 'Saving…' : (showEditWorkspaceModal ? 'Update' : 'Create Workspace')}</span>
                 </button>
               </div>
             </form>
@@ -1334,10 +1684,10 @@ const Dashboard = () => {
         </div>
       )}
 
+      {/* ── Delete Session Modal ─────────────────────────────────────────── */}
       {deleteTargetChat && (
         <div className="modal-backdrop" onClick={() => setDeleteTargetChat(null)}>
-          <div className="modal-content modal-sm" onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
+          <div className="modal-content modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <AlertTriangle className="icon text-danger" />
@@ -1348,47 +1698,23 @@ const Dashboard = () => {
               </button>
             </div>
 
-            {/* Body */}
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <p style={{ margin: 0, color: 'var(--color-body)', fontSize: '13px', lineHeight: '1.6' }}>
+              <p style={{ margin: 0, color: 'var(--color-body)', fontSize: '13px', lineHeight: 1.6 }}>
                 Are you sure you want to permanently delete this session?
               </p>
-
-              <div style={{
-                background: 'var(--color-canvas-soft)',
-                border: '1px solid var(--color-hairline)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '10px 14px',
-              }}>
+              <div style={{ background: 'var(--color-canvas-soft)', border: '1px solid var(--color-hairline)', borderRadius: 'var(--radius-sm)', padding: '10px 14px' }}>
                 <p style={{ margin: 0, color: 'var(--color-ink)', fontWeight: 500, fontSize: '13px' }}>
-                  {deleteTargetChat.display_name || deleteTargetChat.title || 'Untitled Session'}
-                </p>
-                <p style={{ margin: '4px 0 0', color: 'var(--color-body-mid)', fontSize: '11px', fontFamily: 'var(--font-mono)' }}>
-                  Session ID: {deleteTargetChat.id.substring(0, 13).toUpperCase()}...
+                  {getChatTitle(deleteTargetChat)}
                 </p>
               </div>
-
-              <p style={{ margin: 0, color: 'var(--color-body-mid)', fontSize: '12px', lineHeight: '1.5' }}>
-                All associated query message history will be removed from memory. This action cannot be undone.
+              <p style={{ margin: 0, color: 'var(--color-body-mid)', fontSize: '12px', lineHeight: 1.5 }}>
+                All message history will be permanently removed. This cannot be undone.
               </p>
             </div>
 
-            {/* Footer */}
-            <div style={{
-              display: 'flex',
-              justifyContent: 'flex-end',
-              gap: '10px',
-              padding: 'var(--space-lg) var(--space-xl)',
-              borderTop: '1px solid var(--color-hairline)',
-            }}>
-              <button className="btn outline-btn" onClick={() => setDeleteTargetChat(null)}>
-                Cancel
-              </button>
-              <button
-                className="btn danger-btn"
-                onClick={confirmDeleteChat}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-              >
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', padding: 'var(--space-lg) var(--space-xl)', borderTop: '1px solid var(--color-hairline)' }}>
+              <button className="btn outline-btn" onClick={() => setDeleteTargetChat(null)}>Cancel</button>
+              <button className="btn danger-btn" onClick={confirmDeleteChat} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                 <Trash2 className="icon-sm" />
                 <span>Delete Session</span>
               </button>
@@ -1398,12 +1724,7 @@ const Dashboard = () => {
       )}
 
       <footer className="footer-bar">
-        <div>© 2026 LEXIS CORP • CONSOLE CHROME ENGINE</div>
-        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-          <span className="esrb-badge">SOC 2 TYPE II</span>
-          <span className="esrb-badge">256-BIT AES</span>
-          <Link to="/dev-console" style={{ color: '#ecab37', textDecoration: 'none', fontWeight: '700' }}>DEV CONSOLE</Link>
-        </div>
+        <div>© 2026 LEXIS CORP • SOC 2 TYPE II • 256-BIT AES</div>
       </footer>
     </div>
   );

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { LexisLogo } from '../components/icons';
 
 const AuthPage = () => {
   const { user, login, register } = useAuth();
@@ -163,8 +164,8 @@ const AuthPage = () => {
         <div className="auth-form-container">
           {/* Header Inside Form */}
           <div className="auth-form-header">
-            <div className="logo-pill" style={{ display: 'inline-flex', border: '2px solid var(--color-primary)', margin: '0 auto 12px auto' }}>
-              <span style={{ fontSize: '12px' }}>📚</span>
+            <div className="logo-pill" style={{ display: 'inline-flex', border: '1.5px solid var(--color-primary)', margin: '0 auto 12px auto', gap: '8px' }}>
+              <LexisLogo size={14} />
               <span className="logo-wordmark" style={{ fontSize: '11px' }}>LEXIS</span>
             </div>
             <h2 className="auth-form-title">{isLogin ? 'Sign In' : 'Register'}</h2>

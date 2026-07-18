@@ -6,6 +6,16 @@ const ProfileDropdown = ({ user, onLogout }) => {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef(null);
+  const triggerRef = useRef(null);
+  const menuItemsRef = useRef([]);
+
+  // Reset menu item refs on each render
+  menuItemsRef.current = [];
+  const addToRefs = (el) => {
+    if (el && !menuItemsRef.current.includes(el)) {
+      menuItemsRef.current.push(el);
+    }
+  };
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -16,6 +26,63 @@ const ProfileDropdown = ({ user, onLogout }) => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Keyboard navigation inside open dropdown
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!open) return;
+
+      if (e.key === 'Escape') {
+        setOpen(false);
+        triggerRef.current?.focus();
+        e.preventDefault();
+      }
+
+      if (e.key === 'ArrowDown') {
+        const activeIndex = menuItemsRef.current.indexOf(document.activeElement);
+        const nextIndex = (activeIndex + 1) % menuItemsRef.current.length;
+        menuItemsRef.current[nextIndex]?.focus();
+        e.preventDefault();
+      }
+
+      if (e.key === 'ArrowUp') {
+        const activeIndex = menuItemsRef.current.indexOf(document.activeElement);
+        const prevIndex = (activeIndex - 1 + menuItemsRef.current.length) % menuItemsRef.current.length;
+        menuItemsRef.current[prevIndex]?.focus();
+        e.preventDefault();
+      }
+
+      if (e.key === 'Tab') {
+        const activeIndex = menuItemsRef.current.indexOf(document.activeElement);
+        if (e.shiftKey) {
+          // Wrap Shift+Tab focus to the last element if on the first
+          if (activeIndex === 0) {
+            menuItemsRef.current[menuItemsRef.current.length - 1]?.focus();
+            e.preventDefault();
+          }
+        } else {
+          // Wrap Tab focus to the first element if on the last
+          if (activeIndex === menuItemsRef.current.length - 1) {
+            menuItemsRef.current[0]?.focus();
+            e.preventDefault();
+          }
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [open]);
+
+  // Focus the first menu item when dropdown opens
+  useEffect(() => {
+    if (open) {
+      const timer = setTimeout(() => {
+        menuItemsRef.current[0]?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [open]);
 
   const handleNavigate = (path) => {
     navigate(path);
@@ -28,8 +95,12 @@ const ProfileDropdown = ({ user, onLogout }) => {
   return (
     <div className="profile-dropdown-container" ref={dropdownRef}>
       <button 
+        ref={triggerRef}
         className="profile-avatar-btn"
         onClick={() => setOpen(!open)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Account Menu"
         title="Account Menu"
       >
         {user?.avatar ? (
@@ -42,7 +113,11 @@ const ProfileDropdown = ({ user, onLogout }) => {
       </button>
 
       {open && (
-        <div className="profile-dropdown-panel">
+        <div 
+          className="profile-dropdown-panel"
+          role="menu"
+          aria-label="User account actions"
+        >
           <div className="profile-dropdown-header">
             <div className="profile-avatar-large">
               {user?.avatar ? (
@@ -59,24 +134,44 @@ const ProfileDropdown = ({ user, onLogout }) => {
 
           <div className="profile-dropdown-divider" />
 
-          <button className="profile-dropdown-item" onClick={() => handleNavigate('/profile')}>
+          <button 
+            ref={addToRefs}
+            role="menuitem"
+            className="profile-dropdown-item" 
+            onClick={() => handleNavigate('/profile')}
+          >
             <User className="icon" />
             <span>Profile</span>
           </button>
 
-          <button className="profile-dropdown-item" onClick={() => handleNavigate('/settings')}>
+          <button 
+            ref={addToRefs}
+            role="menuitem"
+            className="profile-dropdown-item" 
+            onClick={() => handleNavigate('/settings')}
+          >
             <Settings className="icon" />
             <span>Settings</span>
           </button>
 
-          <button className="profile-dropdown-item" onClick={() => handleNavigate('/billing')}>
+          <button 
+            ref={addToRefs}
+            role="menuitem"
+            className="profile-dropdown-item" 
+            onClick={() => handleNavigate('/billing')}
+          >
             <CreditCard className="icon" />
             <span>Billing</span>
           </button>
 
           <div className="profile-dropdown-divider" />
 
-          <button className="profile-dropdown-item danger" onClick={() => { setOpen(false); onLogout(); }}>
+          <button 
+            ref={addToRefs}
+            role="menuitem"
+            className="profile-dropdown-item danger" 
+            onClick={() => { setOpen(false); onLogout(); }}
+          >
             <LogOut className="icon" />
             <span>Log Out</span>
           </button>

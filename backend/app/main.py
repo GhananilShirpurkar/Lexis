@@ -81,7 +81,7 @@ async def init_db():
         async with engine.connect() as conn:
             # Check users, chats, invoices, and new onboarding columns
             await conn.execute(text("SELECT hashed_password, display_name, plan, settings, username, avatar_url, role, onboarding_completed, onboarding_skipped_at FROM users LIMIT 1"))
-            await conn.execute(text("SELECT is_unified, is_workspace_chat FROM chats LIMIT 1"))
+            await conn.execute(text("SELECT is_unified, is_workspace_chat, user_edited_title, generated_title, generated_summary, summary_status FROM chats LIMIT 1"))
             await conn.execute(text("SELECT id FROM invoices LIMIT 1"))
             await conn.execute(text("SELECT id FROM workspaces LIMIT 1"))
             await conn.execute(text("SELECT id FROM workspace_chats LIMIT 1"))

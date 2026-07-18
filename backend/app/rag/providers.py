@@ -34,6 +34,16 @@ async def stream_mock(prompt: str) -> AsyncGenerator[str, None]:
     for offline testing and development.
     """
     import re
+    import json
+    
+    if "Analyze this document and provide" in prompt:
+        mock_json = {
+            "summary": "This is a simulated document summary. It describes the main topics of the uploaded document, including core architectural design, interface definitions, and workflows.",
+            "title": "Document Summary"
+        }
+        yield json.dumps(mock_json)
+        return
+
     # Extract query
     query_match = re.search(r"User Query:\s*(.*)", prompt, re.IGNORECASE)
     user_query = query_match.group(1).strip() if query_match else ""
@@ -95,17 +105,18 @@ async def stream_gemini(prompt: str) -> AsyncGenerator[str, None]:
 
     async with llm_breaker.semaphore:
         try:
-            client = genai.Client(api_key=settings.GEMINI_API_KEY)
+            client = genai.Client(api_key=settings.GEMINI_API_KEY, http_options={"timeout": 5.0})
             models_to_try = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
             
             for model_name in models_to_try:
                 try:
-                    response = client.models.generate_content_stream(
+                    # Use client.aio for non-blocking async generator streaming
+                    response = await client.aio.models.generate_content_stream(
                         model=model_name,
                         contents=prompt,
                     )
                     has_yielded = False
-                    for chunk in response:
+                    async for chunk in response:
                         if chunk.text:
                             has_yielded = True
                             yield chunk.text
@@ -114,6 +125,9 @@ async def stream_gemini(prompt: str) -> AsyncGenerator[str, None]:
                         return
                 except Exception as model_err:
                     logger.warning(f"google.genai model {model_name} failed: {model_err}")
+                    err_str = str(model_err).lower()
+                    if any(term in err_str for term in ["401", "403", "invalid_api_key", "unauthorized"]):
+                        break
                     continue
             llm_breaker._record_failure(Exception("All Gemini models failed"))
         except CircuitBreakerOpenException as cbo:

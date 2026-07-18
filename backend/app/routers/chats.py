@@ -1,8 +1,10 @@
 import os
 import shutil
 import uuid
+import asyncio
+import json
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +20,8 @@ from app.schemas.chat import ChatCreate, ChatUpdate, ChatResponse, ChatDetailRes
 from app.storage.r2_client import delete_file
 from app.config import settings
 from app.cache import cache
+from app.documents.summarizer import generate_document_summary
+from app.sse import sse_manager
 
 router = APIRouter(
     prefix="/chats",
@@ -34,6 +38,7 @@ router = APIRouter(
 async def create_chat(
     request: Request,
     payload: ChatCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db)
 ):
     user_id = request.state.user_id
@@ -72,6 +77,7 @@ async def create_chat(
     title = payload.title or "New Chat"
 
     # 4. If current_doc_id is provided, verify it exists and belongs to the user
+    doc = None
     if payload.current_doc_id:
         doc_query = select(Document).where(
             Document.id == payload.current_doc_id,
@@ -97,12 +103,22 @@ async def create_chat(
         display_name=title,
         original_name=None,
         last_provider=default_provider,
-        current_doc_id=payload.current_doc_id
+        current_doc_id=payload.current_doc_id,
+        summary_status="generating" if payload.current_doc_id else "not_applicable"
     )
     
     db.add(new_chat)
     await db.commit()
     await db.refresh(new_chat)
+
+    if payload.current_doc_id and doc:
+        background_tasks.add_task(
+            generate_document_summary,
+            new_chat.id,
+            payload.current_doc_id,
+            doc.filename,
+            None
+        )
 
     await cache.delete_pattern(f"user:{user_id}:chats:*")
     return new_chat
@@ -473,11 +489,24 @@ async def update_chat(
         
         # Track original_name on first rename
         if chat.original_name is None:
-            # Set original_name to current display_name (or title if display_name is not set yet)
             chat.original_name = chat.display_name or chat.title
 
         chat.display_name = payload.display_name
         chat.title = payload.display_name
+        chat.user_edited_title = payload.display_name
+
+    # 1.5. Handle user_edited_title explicitly
+    if payload.user_edited_title is not None:
+        if payload.user_edited_title == "" or payload.user_edited_title.lower() == "reset":
+            chat.user_edited_title = None
+            chat.title = chat.generated_title or chat.original_name or chat.title
+            chat.display_name = chat.title
+        else:
+            if chat.original_name is None:
+                chat.original_name = chat.display_name or chat.title
+            chat.user_edited_title = payload.user_edited_title
+            chat.title = payload.user_edited_title
+            chat.display_name = payload.user_edited_title
 
     # 2. Handle current_doc_id updates
     if payload.current_doc_id is not None:
@@ -589,5 +618,113 @@ async def delete_chat(
                         shutil.rmtree(persist_dir)
                     except Exception:
                         pass
-
     return
+
+@router.post(
+    "/{chat_id}/regenerate-summary",
+    status_code=status.HTTP_200_OK,
+    summary="Regenerate document summary and title",
+    description="Trigger a background task to regenerate the document summary and title."
+)
+async def regenerate_summary(
+    request: Request,
+    chat_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db)
+):
+    user_id = request.state.user_id
+    chat_query = select(Chat).where(Chat.id == chat_id, Chat.user_id == user_id)
+    chat_result = await db.execute(chat_query)
+    chat = chat_result.scalars().first()
+    if not chat:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": {
+                    "code": "CHAT_NOT_FOUND",
+                    "message": "The requested chat does not exist or does not belong to you."
+                }
+            }
+        )
+    if not chat.current_doc_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": "NO_DOCUMENT_ASSOCIATED",
+                    "message": "No document is associated with this chat session."
+                }
+            }
+        )
+    if chat.summary_status == "generating":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": {
+                    "code": "SUMMARY_GENERATING",
+                    "message": "Summary is already being generated."
+                }
+            }
+        )
+        
+    doc_query = select(Document).where(Document.id == chat.current_doc_id, Document.user_id == user_id)
+    doc_result = await db.execute(doc_query)
+    doc = doc_result.scalars().first()
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": {
+                    "code": "DOCUMENT_NOT_FOUND",
+                    "message": "The document associated with this chat could not be found."
+                }
+            }
+        )
+        
+    chat.summary_status = "generating"
+    await db.commit()
+    
+    background_tasks.add_task(
+        generate_document_summary,
+        chat.id,
+        chat.current_doc_id,
+        doc.filename,
+        None
+    )
+    
+    return {"status": "generating"}
+
+@router.get("/{chat_id}/events")
+async def chat_events(
+    request: Request,
+    chat_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    SSE endpoint to subscribe to real-time updates for a specific chat.
+    """
+    user_id = request.state.user_id
+    chat_query = select(Chat).where(Chat.id == chat_id, Chat.user_id == user_id)
+    chat_result = await db.execute(chat_query)
+    chat = chat_result.scalars().first()
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+        
+    async def event_generator():
+        queue = await sse_manager.connect(chat_id)
+        try:
+            # Yield initial state
+            yield f"data: {json.dumps({'type': 'initial', 'summary_status': chat.summary_status, 'generated_summary': chat.generated_summary, 'generated_title': chat.generated_title})}\n\n"
+            
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    data = await asyncio.wait_for(queue.get(), timeout=2.0)
+                    yield f"data: {json.dumps(data)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+        finally:
+            await sse_manager.disconnect(chat_id, queue)
+            
+    return StreamingResponse(event_generator(), media_type="text/event-stream")

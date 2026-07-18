@@ -19,6 +19,42 @@ const createIcon = (paths) => ({ className, style, ...props }) => (
   </svg>
 );
 
+export const Menu = createIcon(
+  <>
+    <line x1="4" x2="20" y1="12" y2="12" />
+    <line x1="4" x2="20" y1="6" y2="6" />
+    <line x1="4" x2="20" y1="18" y2="18" />
+  </>
+);
+
+export const LexisLogo = ({ className, size = 16, style, ...props }) => (
+  <svg 
+    width={size} 
+    height={size} 
+    viewBox="0 0 100 100" 
+    xmlns="http://www.w3.org/2000/svg" 
+    aria-hidden="true"
+    className={className || "icon"}
+    style={style}
+    {...props}
+  >
+    <defs>
+      <linearGradient id="lexis-l-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#3B82F6"/>
+        <stop offset="100%" stopColor="#8B5CF6"/>
+      </linearGradient>
+    </defs>
+    <path 
+      d="M28 18 L28 82 L72 82" 
+      stroke="url(#lexis-l-grad)" 
+      strokeWidth="14" 
+      strokeLinecap="round" 
+      strokeLinejoin="round" 
+      fill="none"
+    />
+  </svg>
+);
+
 export const BookOpen = createIcon(
   <>
     <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />

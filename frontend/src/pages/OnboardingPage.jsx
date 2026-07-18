@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
 import SpotlightTour from '../components/SpotlightTour';
-import { User, Sparkles, CheckCircle, Upload, ArrowRight, BookOpen, AlertTriangle } from '../components/icons';
+import { User, Sparkles, CheckCircle, Upload, ArrowRight, BookOpen, AlertTriangle, LexisLogo } from '../components/icons';
 
 const ROLES = [
   'Student',
@@ -175,8 +175,8 @@ const OnboardingPage = () => {
       <div className="onboarding-card glass-panel">
         {/* Header */}
         <div className="onboarding-header">
-          <div className="onboarding-logo">
-            <BookOpen className="icon text-accent" />
+          <div className="onboarding-logo" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <LexisLogo size={20} />
             <span>LEXIS</span>
           </div>
 

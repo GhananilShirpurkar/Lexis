@@ -9,21 +9,13 @@ import { Globe } from './icons';
 
 // Simple Citation Badge Component
 const CitationBadge = ({ citation, label, onClick }) => {
-  const { theme } = useTheme();
-  const isDark =
-    theme === 'dark' ||
-    (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-
   const titleText = citation
     ? `Doc: ${citation.doc_filename || citation.document_name || 'Source'} (Page ${citation.page_number || 1})`
     : 'Unknown Document Source';
 
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium cursor-pointer mx-1 transition-colors border
-        ${isDark
-          ? 'bg-blue-950/40 text-blue-300 border-blue-500/20 hover:bg-blue-900/40'
-          : 'bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100'}`}
+      className="citation-badge"
       title={titleText}
       onClick={(e) => {
         e.stopPropagation();
@@ -56,7 +48,7 @@ const CodeBlock = ({ language, code }) => {
           {copied ? 'Copied!' : 'Copy'}
         </button>
       </div>
-      <pre className="p-4 overflow-x-auto font-mono text-sm leading-relaxed text-gray-800 dark:text-gray-200 m-0">
+      <pre className="p-4 overflow-x-auto font-mono leading-relaxed text-gray-800 dark:text-gray-200 m-0" style={{ fontSize: '0.875em' }}>
         <code className={language ? `language-${language}` : ''}>
           {code}
         </code>
@@ -77,20 +69,20 @@ export const MessageContent = ({ content, citations, onCitationClick }) => {
   const preprocessContent = (text) => {
     let processed = text;
 
-    // 1. Convert [cite:doc_id] -> [Source](cite://doc_id)
+    // 1. Convert [cite:doc_id] -> [Source](http://cite/doc_id)
     processed = processed.replace(/\[cite:([^\]]+)\]/g, (_, docId) => {
-      return `[Source](cite://${docId})`;
+      return `[Source](http://cite/${docId})`;
     });
 
-    // 2. Convert [Page N] -> [📄 Page N](page://N)
+    // 2. Convert [Page N] -> [📄 Page N](http://page/N)
     processed = processed.replace(/\[(?:Page|page|p\.)\s*(\d+(?:\s*,\s*\d+)*)\]/g, (_, pageNum) => {
-      return `[📄 Page ${pageNum}](page://${pageNum})`;
+      return `[📄 Page ${pageNum}](http://page/${pageNum})`;
     });
 
-    // 3. Convert [Web N: Title](url) -> [🌐 Web N](web://url?href=...)
+    // 3. Convert [Web N: Title](url) -> [🌐 Web N](http://web/url?href=...)
     processed = processed.replace(/\[Web\s*(\d+)(?::\s*([^\]]+))?\]\((https?:\/\/[^)]+)\)/g, (_, webNum, title, url) => {
       const cleanTitle = title || `Source ${webNum}`;
-      return `[🌐 Web ${webNum}](web://url?href=${encodeURIComponent(url)}&title=${encodeURIComponent(cleanTitle)})`;
+      return `[🌐 Web ${webNum}](http://web/url?href=${encodeURIComponent(url)}&title=${encodeURIComponent(cleanTitle)})`;
     });
 
     return processed;
@@ -104,28 +96,31 @@ export const MessageContent = ({ content, citations, onCitationClick }) => {
     attributes: {
       ...defaultSchema.attributes,
       a: [...(defaultSchema.attributes?.a || []), 'href', 'title', 'target', 'rel']
+    },
+    protocols: {
+      href: ['http', 'https', 'mailto', 'tel', 'cite', 'page', 'web']
     }
   };
 
   // Custom components for mapping Markdown to styled theme-aware elements
   const components = {
     p: ({ children }) => (
-      <p className="mb-4 text-gray-800 dark:text-gray-200 leading-relaxed text-sm last:mb-0">
+      <p className="mb-4 text-gray-800 dark:text-gray-200 last:mb-0">
         {children}
       </p>
     ),
     h1: ({ children }) => (
-      <h1 className="text-2xl font-bold mt-6 mb-3 text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-800 pb-1.5">
+      <h1 className="font-bold mt-6 mb-3 text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-800 pb-1.5" style={{ fontSize: '1.625em', lineHeight: '1.25' }}>
         {children}
       </h1>
     ),
     h2: ({ children }) => (
-      <h2 className="text-xl font-semibold mt-5 mb-2.5 text-gray-900 dark:text-white">
+      <h2 className="font-semibold mt-5 mb-2.5 text-gray-900 dark:text-white" style={{ fontSize: '1.375em', lineHeight: '1.3' }}>
         {children}
       </h2>
     ),
     h3: ({ children }) => (
-      <h3 className="text-lg font-medium mt-4 mb-2 text-gray-900 dark:text-white">
+      <h3 className="font-medium mt-4 mb-2 text-gray-900 dark:text-white" style={{ fontSize: '1.1875em', lineHeight: '1.4' }}>
         {children}
       </h3>
     ),
@@ -140,12 +135,12 @@ export const MessageContent = ({ content, citations, onCitationClick }) => {
       </ol>
     ),
     li: ({ children }) => (
-      <li className="pl-0.5 text-sm">
+      <li className="pl-0.5">
         {children}
       </li>
     ),
     blockquote: ({ children }) => (
-      <blockquote className="pl-4 border-l-4 border-gray-300 dark:border-gray-700 italic my-4 text-gray-600 dark:text-gray-400">
+      <blockquote className="pl-4 border-l-4 border-gray-300 dark:border-gray-700 italic my-4 text-gray-600 dark:text-gray-400" style={{ fontSize: '0.9375em' }}>
         {children}
       </blockquote>
     ),
@@ -157,7 +152,7 @@ export const MessageContent = ({ content, citations, onCitationClick }) => {
 
       if (isInline) {
         return (
-          <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800/80 text-rose-600 dark:text-rose-400 font-mono text-xs rounded border border-gray-200 dark:border-gray-700/80" {...props}>
+          <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800/80 text-rose-600 dark:text-rose-400 font-mono rounded border border-gray-200 dark:border-gray-700/80" style={{ fontSize: '0.875em' }} {...props}>
             {children}
           </code>
         );
@@ -169,18 +164,18 @@ export const MessageContent = ({ content, citations, onCitationClick }) => {
     },
     table: ({ children }) => (
       <div className="overflow-x-auto my-4 border border-gray-200 dark:border-gray-850 rounded-lg">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
+        <table className="min-w-full divide-y divide-gray-250 dark:divide-gray-850">
           {children}
         </table>
       </div>
     ),
     thead: ({ children }) => (
-      <thead className="bg-gray-50 dark:bg-gray-900/50">
+      <thead className="bg-gray-50 dark:bg-gray-905/50">
         {children}
       </thead>
     ),
     th: ({ children }) => (
-      <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider border-b border-gray-200 dark:border-gray-800">
+      <th className="px-4 py-2.5 text-left font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider border-b border-gray-200 dark:border-gray-800" style={{ fontSize: '0.75em' }}>
         {children}
       </th>
     ),
@@ -190,41 +185,55 @@ export const MessageContent = ({ content, citations, onCitationClick }) => {
       </tbody>
     ),
     td: ({ children }) => (
-      <td className="px-4 py-2.5 text-sm text-gray-850 dark:text-gray-200 border-b border-gray-100 dark:border-gray-900">
+      <td className="px-4 py-2.5 text-gray-850 dark:text-gray-200 border-b border-gray-100 dark:border-gray-900" style={{ fontSize: '0.9375em' }}>
         {children}
       </td>
     ),
     a: ({ href, children, ...props }) => {
       // 1. Intercept structured UUID citation link
-      if (href?.startsWith('cite://')) {
-        const docId = href.replace('cite://', '');
-        const citation = citations?.find(c => c.document_id === docId);
+      if (href?.startsWith('cite://') || href?.startsWith('http://cite/')) {
+        const docId = href.startsWith('cite://') 
+          ? href.replace('cite://', '') 
+          : href.replace('http://cite/', '');
+        const citation = citations?.find(c => c.document_id === docId) || citations?.[0] || {
+          document_id: docId,
+          doc_filename: 'Source Document',
+          page_number: 1,
+          excerpt: 'No detailed excerpt is available for this citation.'
+        };
         return (
           <CitationBadge
             citation={citation}
             label={children}
-            onClick={() => onCitationClick && citation && onCitationClick(citation)}
+            onClick={() => onCitationClick && onCitationClick(citation)}
           />
         );
       }
 
       // 2. Intercept legacy page citation link
-      if (href?.startsWith('page://')) {
-        const pageNum = href.replace('page://', '');
-        const pageCit = citations?.find(c => String(c.page_number) === pageNum);
+      if (href?.startsWith('page://') || href?.startsWith('http://page/')) {
+        const pageNum = href.startsWith('page://')
+          ? href.replace('page://', '')
+          : href.replace('http://page/', '');
+        const pageCit = citations?.find(c => String(c.page_number) === pageNum) || citations?.[0] || {
+          doc_filename: 'Source Document',
+          page_number: parseInt(pageNum) || 1,
+          excerpt: 'No detailed excerpt is available for this citation.'
+        };
         return (
           <CitationBadge
             citation={pageCit}
             label={`📄 Page ${pageNum}`}
-            onClick={() => onCitationClick && pageCit && onCitationClick(pageCit)}
+            onClick={() => onCitationClick && onCitationClick(pageCit)}
           />
         );
       }
 
       // 3. Intercept legacy web citation link
-      if (href?.startsWith('web://url')) {
+      if (href?.startsWith('web://url') || href?.startsWith('http://web/url')) {
         try {
-          const urlParams = new URLSearchParams(href.split('?')[1]);
+          const queryPart = href.includes('?') ? href.split('?')[1] : '';
+          const urlParams = new URLSearchParams(queryPart);
           const realUrl = urlParams.get('href');
           const title = urlParams.get('title') || 'Web Source';
           return (

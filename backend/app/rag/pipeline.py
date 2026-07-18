@@ -42,7 +42,7 @@ def generate_summary(text: str, filename: str) -> str:
     # 1. Try Gemini via modern google.genai SDK
     if settings.GEMINI_API_KEY:
         try:
-            client = genai.Client(api_key=settings.GEMINI_API_KEY)
+            client = genai.Client(api_key=settings.GEMINI_API_KEY, http_options={"timeout": 5.0})
             for m in ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]:
                 try:
                     res = client.models.generate_content(model=m, contents=prompt)
@@ -50,6 +50,9 @@ def generate_summary(text: str, filename: str) -> str:
                         return res.text.strip()
                 except Exception as m_err:
                     logger.debug(f"google.genai summarization model {m} failed: {m_err}")
+                    err_str = str(m_err).lower()
+                    if any(term in err_str for term in ["401", "403", "invalid_api_key", "unauthorized"]):
+                        break
                     continue
         except Exception as e:
             logger.warning(f"google.genai summarization failed: {e}")
@@ -68,6 +71,9 @@ def generate_summary(text: str, filename: str) -> str:
                         return completion.choices[0].message.content.strip()
                 except Exception as m_err:
                     logger.debug(f"Groq summarization model {m} failed: {m_err}")
+                    err_str = str(m_err).lower()
+                    if any(term in err_str for term in ["401", "403", "invalid_api_key", "unauthorized"]):
+                        break
                     continue
         except Exception as e:
             logger.warning(f"Groq summarization failed: {e}")

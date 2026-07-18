@@ -1,15 +1,23 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { optimisticUpdate, shakeElement } from '../utils/optimistic';
-import { BookOpen, Search, Library, Terminal, Settings as SettingsIcon } from './icons';
+import { Search, Library, Settings as SettingsIcon, Menu, LexisLogo } from './icons';
 import ProfileDropdown from './ProfileDropdown';
 import AlertsDropdown from './AlertsDropdown';
 import ModelSelector from './ModelSelector';
 import apiClient from '../api/client';
 
-const NavigationBar = ({ currentModel, onModelChange, customNotifications, onCustomDismiss }) => {
+const NavigationBar = ({ 
+  currentModel, 
+  onModelChange, 
+  customNotifications, 
+  onCustomDismiss,
+  sidebarOpen,
+  onToggleSidebar
+}) => {
   const { user, logout } = useAuth();
   const { toast } = useToast();
   const location = useLocation();
@@ -75,8 +83,18 @@ const NavigationBar = ({ currentModel, onModelChange, customNotifications, onCus
   return (
     <header className="nav-bar">
       <div className="nav-left">
+        {onToggleSidebar && (
+          <button
+            type="button"
+            className="btn-ghost md:hidden mr-2 p-1.5 focus:outline-none"
+            onClick={onToggleSidebar}
+            aria-label={sidebarOpen ? "Close sidebar menu" : "Open sidebar menu"}
+          >
+            <Menu className="icon" />
+          </button>
+        )}
         <Link to="/" className="logo-pill">
-          <BookOpen className="icon" />
+          <LexisLogo size={16} />
           <span className="logo-wordmark">LEXIS</span>
         </Link>
 
@@ -90,10 +108,6 @@ const NavigationBar = ({ currentModel, onModelChange, customNotifications, onCus
           <Link id="nav-library" to="/library" className={`nav-item ${isActive('/library') ? 'active' : ''}`}>
             <Library className="icon" />
             <span>Library</span>
-          </Link>
-          <Link id="nav-console" to="/dev-console" className={`nav-item ${isActive('/dev-console') ? 'active' : ''}`}>
-            <Terminal className="icon" />
-            <span>Console</span>
           </Link>
           <Link id="nav-settings" to="/settings" className={`nav-item ${isActive('/settings') ? 'active' : ''}`}>
             <SettingsIcon className="icon" />

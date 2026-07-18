@@ -193,7 +193,6 @@ const SettingsPage = () => {
     { id: 'appearance', label: 'Appearance', icon: Eye },
     { id: 'response', label: 'AI Intelligence & Response', icon: Sliders },
     { id: 'vector', label: 'Document Index & Search', icon: Database },
-    { id: 'api', label: 'Developer API Keys', icon: Key },
     { id: 'system', label: 'Automation & Alerts', icon: Shield }
   ];
 
