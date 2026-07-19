@@ -786,6 +786,7 @@ const Dashboard = () => {
           'Content-Type': 'multipart/form-data'
         }
       });
+      setUploadError('');
       setUploadSuccess(`Indexed successfully: ${res.data.filename}`);
       
       // Update active chat to reflect linked document — use doc filename as session name
@@ -854,6 +855,7 @@ const Dashboard = () => {
       };
       setChats(prev => prev.map(c => c.id === newChat.id ? updatedChat : c));
       setActiveChat(updatedChat);
+      setUploadError('');
       setUploadSuccess(`${res.data.filename}`);
       setShowNewSessionModal(false);
       fetchNotifications();
