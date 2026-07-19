@@ -969,7 +969,18 @@ const Dashboard = () => {
                   console.error('Background sync failed:', syncErr);
                 }
               } else if (data.type === 'error') {
-                throw new Error(data.message);
+                setIsGenerating(false);
+                setStreamedResponse('');
+                setMessages(prev => [
+                  ...prev,
+                  {
+                    role: 'assistant',
+                    content: `⚠️ ${data.message || 'Failed to generate response, please try again'}`,
+                    is_error: true,
+                    created_at: new Date()
+                  }
+                ]);
+                return;
               }
             } catch (e) {
               // Ignore incomplete lines

@@ -109,21 +109,21 @@ async def generate_document_summary(
             if settings.GEMINI_API_KEY:
                 try:
                     from google import genai
-                    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+                    client = genai.Client(api_key=settings.GEMINI_API_KEY, http_options={"timeout": 30000})
                     for m in ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]:
                         try:
                             # Use asyncio.wait_for and asyncio.to_thread to prevent blocking the event loop and enforce a timeout
                             res = await asyncio.wait_for(
                                 asyncio.to_thread(client.models.generate_content, model=m, contents=prompt),
-                                timeout=5.0
+                                timeout=35.0
                             )
                             if res and res.text:
                                 summary_data = clean_and_parse_json(res.text)
                                 break
                         except Exception as m_err:
-                            logger.debug(f"Gemini summarizer model {m} failed or timed out: {m_err}")
+                            logger.error(f"model {m} failed: {type(m_err).__name__}: {repr(m_err)}", exc_info=True)
                 except Exception as e:
-                    logger.warning(f"Gemini summarization failed: {e}")
+                    logger.error(f"Gemini summarization failed: {type(e).__name__}: {repr(e)}", exc_info=True)
                     error_msg = str(e)
 
         # 3.3. Offline Fallback (Realistic Heuristic Summary)

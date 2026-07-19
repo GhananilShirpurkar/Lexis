@@ -1,3 +1,5 @@
+from app.core import network  # noqa: F401
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.auth.middleware import JWTMiddleware

@@ -105,7 +105,12 @@ async def stream_gemini(prompt: str) -> AsyncGenerator[str, None]:
 
     async with llm_breaker.semaphore:
         try:
-            client = genai.Client(api_key=settings.GEMINI_API_KEY, http_options={"timeout": 5.0})
+            api_key = settings.GEMINI_API_KEY
+            if not api_key:
+                logger.error("GEMINI_API_KEY is missing or empty at point of call")
+                raise LLMUnavailableError("GEMINI_API_KEY is missing or empty")
+
+            client = genai.Client(api_key=api_key, http_options={"timeout": 30000})
             models_to_try = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
             
             for model_name in models_to_try:
@@ -124,19 +129,23 @@ async def stream_gemini(prompt: str) -> AsyncGenerator[str, None]:
                         llm_breaker._record_success()
                         return
                 except Exception as model_err:
-                    logger.warning(f"google.genai model {model_name} failed: {model_err}")
+                    logger.error(f"model {model_name} failed: {type(model_err).__name__}: {repr(model_err)}", exc_info=True)
                     err_str = str(model_err).lower()
                     if any(term in err_str for term in ["401", "403", "invalid_api_key", "unauthorized"]):
                         break
                     continue
             llm_breaker._record_failure(Exception("All Gemini models failed"))
+            raise LLMUnavailableError("All Gemini models failed to respond")
         except CircuitBreakerOpenException as cbo:
             raise cbo
+        except LLMUnavailableError as lue:
+            raise lue
         except Exception as e:
             llm_breaker._record_failure(e)
-            logger.error(f"Google GenAI API streaming failed: {e}")
+            logger.error(f"Google GenAI API streaming failed: {type(e).__name__}: {repr(e)}", exc_info=True)
+            raise LLMUnavailableError(f"Google GenAI API streaming failed: {e}")
 
-    # Fallback to mock if all official calls fail
+    # Fallback to mock only if FORCE_MOCK_LLM or GEMINI_API_KEY is not configured
     async for chunk in stream_mock(prompt):
         yield chunk
 
@@ -182,14 +191,18 @@ async def stream_groq(prompt: str) -> AsyncGenerator[str, None]:
                         llm_breaker._record_success()
                         return
                 except Exception as groq_m_err:
-                    logger.warning(f"Groq model {model_name} failed: {groq_m_err}")
+                    logger.error(f"model {model_name} failed: {type(groq_m_err).__name__}: {repr(groq_m_err)}", exc_info=True)
                     continue
             llm_breaker._record_failure(Exception("All Groq models failed"))
+            raise LLMUnavailableError("All Groq models failed to respond")
         except CircuitBreakerOpenException as cbo:
             raise cbo
+        except LLMUnavailableError as lue:
+            raise lue
         except Exception as e:
             llm_breaker._record_failure(e)
-            logger.error(f"Groq API streaming failed: {e}")
+            logger.error(f"Groq API streaming failed: {type(e).__name__}: {repr(e)}", exc_info=True)
+            raise LLMUnavailableError(f"Groq API streaming failed: {e}")
 
     async for chunk in stream_mock(prompt):
         yield chunk
