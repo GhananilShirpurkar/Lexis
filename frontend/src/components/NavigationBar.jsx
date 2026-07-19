@@ -4,7 +4,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { optimisticUpdate, shakeElement } from '../utils/optimistic';
-import { Search, Library, Settings as SettingsIcon, Menu, LexisLogo } from './icons';
+import { Search, Library, Settings as SettingsIcon, Menu, X, LexisLogo } from './icons';
 import ProfileDropdown from './ProfileDropdown';
 import AlertsDropdown from './AlertsDropdown';
 import ModelSelector from './ModelSelector';
@@ -23,6 +23,7 @@ const NavigationBar = ({
   const location = useLocation();
   const [notifications, setNotifications] = useState([]);
   const [model, setModel] = useState(currentModel || 'gemini-1.5-flash');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const alertsRef = useRef(null);
 
   useEffect(() => {
@@ -30,6 +31,10 @@ const NavigationBar = ({
       fetchNotifications();
     }
   }, [customNotifications]);
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname]);
 
   const fetchNotifications = async () => {
     try {
@@ -98,9 +103,10 @@ const NavigationBar = ({
           <span className="logo-wordmark">LEXIS</span>
         </Link>
 
-        <div className="nav-divider" />
+        <div className="nav-divider nav-divider-mobile-hide" />
 
-        <nav className="nav-links">
+        {/* Desktop Navigation Links */}
+        <nav className="nav-links nav-links-desktop">
           <Link id="nav-query" to="/" className={`nav-item ${isActive('/') ? 'active' : ''}`}>
             <Search className="icon" />
             <span>Query</span>
@@ -114,6 +120,16 @@ const NavigationBar = ({
             <span>Settings</span>
           </Link>
         </nav>
+
+        {/* Mobile Navigation Toggle Button */}
+        <button
+          type="button"
+          className="btn-ghost md:hidden p-1.5 focus:outline-none ml-1"
+          onClick={() => setMobileNavOpen(prev => !prev)}
+          aria-label={mobileNavOpen ? "Close main navigation menu" : "Open main navigation menu"}
+        >
+          {mobileNavOpen ? <X className="icon" /> : <Menu className="icon" />}
+        </button>
       </div>
 
       <div className="nav-right">
@@ -135,6 +151,39 @@ const NavigationBar = ({
 
         <ProfileDropdown user={user} onLogout={logout} />
       </div>
+
+      {/* Mobile Navigation Dropdown */}
+      {mobileNavOpen && (
+        <nav className="nav-links-mobile md:hidden">
+          <Link 
+            id="mobile-nav-query" 
+            to="/" 
+            className={`nav-item ${isActive('/') ? 'active' : ''}`}
+            onClick={() => setMobileNavOpen(false)}
+          >
+            <Search className="icon" />
+            <span>Query</span>
+          </Link>
+          <Link 
+            id="mobile-nav-library" 
+            to="/library" 
+            className={`nav-item ${isActive('/library') ? 'active' : ''}`}
+            onClick={() => setMobileNavOpen(false)}
+          >
+            <Library className="icon" />
+            <span>Library</span>
+          </Link>
+          <Link 
+            id="mobile-nav-settings" 
+            to="/settings" 
+            className={`nav-item ${isActive('/settings') ? 'active' : ''}`}
+            onClick={() => setMobileNavOpen(false)}
+          >
+            <SettingsIcon className="icon" />
+            <span>Settings</span>
+          </Link>
+        </nav>
+      )}
     </header>
   );
 };

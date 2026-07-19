@@ -245,6 +245,42 @@ html, body, #root {
   padding: 0 var(--space-xl);
   flex-shrink: 0;
   z-index: 100;
+  position: relative;
+}
+
+@media (max-width: 767px) {
+  .nav-bar {
+    padding: 0 var(--space-md);
+  }
+  
+  .nav-links-desktop {
+    display: none !important;
+  }
+
+  .nav-divider-mobile-hide {
+    display: none !important;
+  }
+}
+
+.nav-links-mobile {
+  position: absolute;
+  top: 60px;
+  left: 0;
+  right: 0;
+  background-color: var(--color-canvas-card);
+  border-bottom: 1px solid var(--color-hairline);
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-md);
+  gap: var(--space-xs);
+  z-index: 999;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
+}
+
+.nav-links-mobile .nav-item {
+  width: 100%;
+  padding: 10px var(--space-lg);
+  justify-content: flex-start;
 }
 
 .nav-left, .nav-right {
