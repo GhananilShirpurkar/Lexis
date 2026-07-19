@@ -521,9 +521,6 @@ const Dashboard = () => {
     try {
       const res = await apiClient.get('/chats');
       setChats(res.data);
-      if (res.data.length > 0 && !activeChat) {
-        selectChat(res.data[0]);
-      }
     } catch (err) {
       console.error('Error fetching chats:', err);
     }
