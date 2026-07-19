@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { optimisticUpdate } from '../utils/optimistic';
@@ -340,6 +341,23 @@ const Dashboard = () => {
   const newChatBtnRef = useRef(null);
   const sidebarSessionListRef = useRef(null);
   const alertsDropdownRef = useRef(null);
+  const textareaRef = useRef(null);
+
+  // Auto-expand query textarea on input / newline
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
+    }
+  }, [queryText]);
+
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.state?.openSidebar) {
+      setSidebarOpen(true);
+    }
+  }, [location.state]);
 
   // Load initial data
   useEffect(() => {
@@ -1358,16 +1376,16 @@ const Dashboard = () => {
                   <div style={{ fontSize: '10px', opacity: 0.7, textTransform: 'uppercase', textAlign: m.role === 'user' ? 'right' : 'left', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
                     {(m.role === 'assistant' && m.provider) ? `${m.provider.toUpperCase()} • ` : ''}
                     {new Date(m.created_at).toLocaleTimeString()}
-                    {m.had_web_search && (
+                    {(m.had_web_search || (m.web_sources && m.web_sources.length > 0)) && (
                       <span className="web-search-indicator">
-                        <Globe className="icon-tiny" /> Searched the web • {m.web_source_count} source{m.web_source_count !== 1 ? 's' : ''}
+                        <Globe className="icon-tiny" /> Searched the web • {m.web_sources ? m.web_sources.length : m.web_source_count} source{(m.web_sources ? m.web_sources.length : m.web_source_count) !== 1 ? 's' : ''}
                       </span>
                     )}
                   </div>
 
                   {/* Render web source cards if available for this message */}
                   {(() => {
-                    const sources = (m.id && webSourcesMap[m.id]) || webSourcesMap[idx];
+                    const sources = m.web_sources || (m.id && webSourcesMap[m.id]) || webSourcesMap[idx];
                     if (!sources || sources.length === 0) return null;
                     return (
                       <div className="web-sources-section">
@@ -1461,11 +1479,13 @@ const Dashboard = () => {
                 {webSearchEnabled && <span className="ws-toggle-label">WEB</span>}
               </button>
               <textarea 
+                ref={textareaRef}
                 className="chat-textarea"
                 placeholder={activeChat ? (webSearchEnabled ? "Search the web and your documents..." : "Type your query or instruction...") : "Attach a document to begin querying..."}
                 value={queryText}
                 onChange={(e) => setQueryText(e.target.value)}
                 disabled={!activeChat || isGenerating}
+                rows={1}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();

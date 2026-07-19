@@ -48,7 +48,7 @@ const ModelSelector = ({ currentModelValue, onChange }) => {
         onClick={() => setOpen(!open)}
       >
         <Cpu className="icon" />
-        <span>{activeModel.name}</span>
+        <span className="model-selector-label">{activeModel.name}</span>
         <ChevronDown className={`icon chevron ${open ? 'open' : ''}`} />
       </button>
 

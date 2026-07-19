@@ -24,7 +24,7 @@ const AlertsDropdown = ({ notifications = [], onDismiss }) => {
         onClick={() => setOpen(!open)}
       >
         <Bell className="icon" />
-        <span>ALERTS</span>
+        <span className="alerts-btn-label">ALERTS</span>
         {unreadCount > 0 && (
           <span className="alerts-badge">{unreadCount}</span>
         )}

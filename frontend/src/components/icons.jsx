@@ -27,6 +27,13 @@ export const Menu = createIcon(
   </>
 );
 
+export const PanelLeft = createIcon(
+  <>
+    <rect width="18" height="18" x="3" y="3" rx="2" />
+    <path d="M9 3v18" />
+  </>
+);
+
 export const LexisLogo = ({ className, size = 16, style, ...props }) => (
   <svg 
     width={size} 

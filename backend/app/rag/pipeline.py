@@ -506,13 +506,14 @@ async def query(
             content=full_response,
             provider=provider,
             doc_id=chat.current_doc_id,
+            web_sources=web_sources_data if web_sources_data else None,
             created_at=now_time
         )
         db.add(user_msg)
         db.add(assistant_msg)
         await db.flush()
 
-        # Bulk insert document citations via PostgreSQL Core (web sources are ephemeral)
+        # Bulk insert document citations via PostgreSQL Core
         if grouped_citations_data:
             citation_values = [
                 {

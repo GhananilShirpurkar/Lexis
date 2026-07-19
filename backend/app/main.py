@@ -89,6 +89,7 @@ async def init_db():
             await conn.execute(text("SELECT id FROM workspace_chats LIMIT 1"))
             await conn.execute(text("SELECT id FROM workspace_chat_metadata LIMIT 1"))
             await conn.execute(text("ALTER TABLE citations ALTER COLUMN excerpt TYPE TEXT"))
+            await conn.execute(text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS web_sources JSONB"))
             await conn.commit()
     except Exception:
         needs_reset = True

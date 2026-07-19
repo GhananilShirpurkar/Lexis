@@ -40,6 +40,7 @@ class MessageResponse(MessageBase):
     doc_id: uuid.UUID | None = None
     created_at: datetime
     citations: list[CitationResponse] = []
+    web_sources: list[dict] | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
