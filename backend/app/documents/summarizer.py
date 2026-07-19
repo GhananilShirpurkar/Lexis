@@ -41,7 +41,28 @@ def get_document_text_from_index(user_id: uuid.UUID, doc_id: uuid.UUID) -> str:
     from llama_index.core import StorageContext, load_index_from_storage
     persist_dir = os.path.join(settings.STORAGE_INDICES_DIR, str(user_id), str(doc_id))
     if not os.path.exists(persist_dir):
-        return ""
+        # Try to restore index from S3/Tigris
+        try:
+            from app.storage.r2_client import get_r2_client
+            client = get_r2_client()
+            prefix = f"indices/{user_id}/{doc_id}/"
+            response = client.list_objects_v2(Bucket=settings.S3_BUCKET_NAME, Prefix=prefix)
+            contents = response.get("Contents", [])
+            if not contents:
+                return ""
+            os.makedirs(persist_dir, exist_ok=True)
+            for obj in contents:
+                key = obj["Key"]
+                fname = key.split("/")[-1]
+                if fname:
+                    get_res = client.get_object(Bucket=settings.S3_BUCKET_NAME, Key=key)
+                    body = get_res["Body"].read()
+                    with open(os.path.join(persist_dir, fname), "wb") as f:
+                        f.write(body)
+        except Exception as err:
+            logger.warning(f"Failed to restore index from S3 for summarizer {user_id}/{doc_id}: {err}")
+            return ""
+
     try:
         storage_context = StorageContext.from_defaults(persist_dir=persist_dir)
         index = load_index_from_storage(storage_context)

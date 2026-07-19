@@ -9,7 +9,7 @@ from llama_index.core.llms.mock import MockLLM
 from llama_index.core.embeddings import MockEmbedding
 from llama_index.core.node_parser import SentenceSplitter
 from app.config import settings
-from app.storage.r2_client import delete_file
+from app.storage.r2_client import delete_file, get_r2_client
 import logging
 from google import genai
 from groq import Groq
@@ -162,6 +162,22 @@ def index_document(
         os.makedirs(persist_dir, exist_ok=True)
         index.storage_context.persist(persist_dir=persist_dir)
 
+        # Backup index files to Tigris/S3
+        try:
+            client = get_r2_client()
+            for fname in os.listdir(persist_dir):
+                fpath = os.path.join(persist_dir, fname)
+                if os.path.isfile(fpath):
+                    with open(fpath, "rb") as f:
+                        data = f.read()
+                    client.put_object(
+                        Bucket=settings.S3_BUCKET_NAME,
+                        Key=f"indices/{user_id}/{doc_id}/{fname}",
+                        Body=data
+                    )
+        except Exception as err:
+            logger.warning(f"Failed to backup vector index to S3 for {user_id}/{doc_id}: {err}")
+
         # Generate summary using the LLM provider pipeline
         summary = generate_summary(full_text, filename)
 
@@ -203,7 +219,28 @@ def retrieve_context(user_id: str, doc_id: str, query: str, top_k: int = 5) -> l
 
     persist_dir = os.path.join(settings.STORAGE_INDICES_DIR, str(user_id), str(doc_id))
     if not os.path.exists(persist_dir):
-        raise FileNotFoundError(f"Index directory {persist_dir} does not exist")
+        # Try to restore index from S3/Tigris
+        try:
+            client = get_r2_client()
+            prefix = f"indices/{user_id}/{doc_id}/"
+            response = client.list_objects_v2(Bucket=settings.S3_BUCKET_NAME, Prefix=prefix)
+            contents = response.get("Contents", [])
+            if not contents:
+                raise FileNotFoundError(f"Index directory {persist_dir} does not exist")
+            os.makedirs(persist_dir, exist_ok=True)
+            for obj in contents:
+                key = obj["Key"]
+                fname = key.split("/")[-1]
+                if fname:
+                    get_res = client.get_object(Bucket=settings.S3_BUCKET_NAME, Key=key)
+                    body = get_res["Body"].read()
+                    with open(os.path.join(persist_dir, fname), "wb") as f:
+                        f.write(body)
+        except FileNotFoundError:
+            raise
+        except Exception as err:
+            logger.warning(f"Failed to restore index from S3 for {user_id}/{doc_id}: {err}")
+            raise FileNotFoundError(f"Index directory {persist_dir} does not exist")
     
     storage_context = StorageContext.from_defaults(persist_dir=persist_dir)
     index = load_index_from_storage(storage_context)
