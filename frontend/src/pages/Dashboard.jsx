@@ -7,7 +7,8 @@ import apiClient from '../api/client';
 import { 
   Terminal, Plus, MessageSquare, Paperclip, ArrowRight, Upload, X, Pencil,
   FileText, AlertTriangle, Trash2, CheckCircle, ChevronLeft, ChevronRight,
-  Globe, ExternalLink, FolderPlus, Folder, ChevronDown, Sparkles, LexisLogo
+  Globe, ExternalLink, FolderPlus, Folder, ChevronDown, Sparkles, LexisLogo,
+  Search
 } from '../components/icons';
 
 import ProfileDropdown from '../components/ProfileDropdown';
@@ -359,8 +360,21 @@ const Dashboard = () => {
   const { user, token } = useAuth();
   const { toast } = useToast();
 
-  // Relative time helper
+  // Document type detection helper
+  const getChatDocType = (chat) => {
+    if (!chat) return null;
+    const str = (chat.doc_filename || chat.document_name || chat.filename || chat.display_name || chat.title || '').toLowerCase();
+    if (str.endsWith('.pdf') || chat.doc_type === 'pdf') return 'PDF';
+    if (str.endsWith('.docx') || str.endsWith('.doc') || chat.doc_type === 'docx') return 'DOCX';
+    if (str.endsWith('.txt') || chat.doc_type === 'txt') return 'TXT';
+    if (str.endsWith('.md')) return 'MD';
+    if (chat.current_doc_id) return 'DOC';
+    return null;
+  };
+
+  // Enhanced relative time helper (avoids raw slashes)
   const formatRelativeTime = (dateStr) => {
+    if (!dateStr) return '';
     const diff = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return 'just now';
@@ -370,12 +384,15 @@ const Dashboard = () => {
     const days = Math.floor(hrs / 24);
     if (days === 1) return 'Yesterday';
     if (days < 7) return `${days}d ago`;
-    return new Date(dateStr).toLocaleDateString();
+    const d = new Date(dateStr);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   };
 
   // Core data states
   const [chats, setChats] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
+  const [sidebarSearchQuery, setSidebarSearchQuery] = useState('');
+  const sidebarSearchInputRef = useRef(null);
   const [messages, setMessages] = useState([]);
   const [citations, setCitations] = useState([]);
   const [notifications, setNotifications] = useState([]);
@@ -732,6 +749,23 @@ const Dashboard = () => {
   const handleCreateChat = () => {
     setShowNewSessionModal(true);
   };
+
+  // Global shortcuts for sidebar (⌘K to search, ⌘N for new session)
+  useEffect(() => {
+    const handleGlobalShortcuts = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        sidebarSearchInputRef.current?.focus();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n' && !e.shiftKey) {
+        if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+        e.preventDefault();
+        handleCreateChat();
+      }
+    };
+    window.addEventListener('keydown', handleGlobalShortcuts);
+    return () => window.removeEventListener('keydown', handleGlobalShortcuts);
+  }, []);
 
   const [deleteTargetChat, setDeleteTargetChat] = useState(null);
 
@@ -1223,10 +1257,13 @@ const Dashboard = () => {
               ref={newChatBtnRef} 
               className="sidebar-action-btn primary" 
               onClick={handleCreateChat} 
-              title="New Session"
+              title="New Session (⌘N)"
             >
-              <Plus className="icon-small" />
-              {sidebarOpen && <span>New Session</span>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Plus className="icon-small" />
+                {sidebarOpen && <span>New Session</span>}
+              </div>
+              {sidebarOpen && <kbd className="sidebar-shortcut-kbd">⌘N</kbd>}
             </button>
             <button 
               className="sidebar-action-btn secondary" 
@@ -1242,96 +1279,192 @@ const Dashboard = () => {
             </button>
           </div>
 
-          {sidebarOpen && <SidebarNudgeBanner />}
-
           {sidebarOpen && (
-            <div ref={sidebarSessionListRef} className="sidebar-session-list">
-              {chats.filter(c => !c.is_workspace_chat).length === 0 ? (
-                <div className="sidebar-empty">No sessions yet. Start with "+ New Session" above.</div>
+            <div className="sidebar-search-box">
+              <Search className="icon-tiny sidebar-search-icon" />
+              <input
+                ref={sidebarSearchInputRef}
+                type="text"
+                className="sidebar-search-input"
+                placeholder="Search sessions... (⌘K)"
+                value={sidebarSearchQuery}
+                onChange={(e) => setSidebarSearchQuery(e.target.value)}
+              />
+              {sidebarSearchQuery ? (
+                <button
+                  type="button"
+                  className="sidebar-search-clear"
+                  onClick={() => setSidebarSearchQuery('')}
+                  title="Clear search"
+                >
+                  <X className="icon-tiny" />
+                </button>
               ) : (
-                groupChatsByPeriod(chats.filter(c => !c.is_workspace_chat)).map(group => (
-                  <div key={group.title} className="sidebar-group">
-                    <div className="sidebar-group-label">{group.title}</div>
-                    <div className="sidebar-group-items">
-                      {group.items.map(chat => (
-                        <div
-                          key={chat.id}
-                          className={`sidebar-session-item ${activeChat?.id === chat.id ? 'active' : ''} ${chat.isOptimistic ? 'is-optimistic' : ''} sidebar-session-item-hoverable`}
-                          onClick={() => renamingChatId !== chat.id && selectChat(chat)}
-                        >
-                          {renamingChatId === chat.id ? (
-                            <form
-                              onSubmit={(e) => handleSidebarRename(chat, e)}
-                              style={{ flex: 1, display: 'flex', gap: '4px', alignItems: 'center' }}
-                              onClick={e => e.stopPropagation()}
-                            >
-                              <input
-                                autoFocus
-                                className="text-input"
-                                value={renamingValue}
-                                onChange={e => setRenamingValue(e.target.value)}
-                                maxLength={60}
-                                style={{ flex: 1, height: '26px', fontSize: '12px', padding: '2px 8px' }}
-                                onBlur={() => setRenamingChatId(null)}
-                                onKeyDown={e => e.key === 'Escape' && setRenamingChatId(null)}
-                              />
-                              <button type="submit" className="btn-ghost" style={{ color: 'var(--color-accent-green)', padding: '2px' }} title="Save">✓</button>
-                            </form>
-                          ) : (
-                            <>
-                              <MessageSquare className="icon-small session-item-icon" />
-                              <div className="session-item-content">
-                                <div className="session-item-name">{getChatTitle(chat)}</div>
-                                {chat.created_at && (
-                                  <div className="session-item-time">
-                                    {formatRelativeTime(chat.created_at)}
-                                  </div>
-                                )}
-                              </div>
-                              {chat.isOptimistic ? (
-                                <span className="session-item-optimistic">creating...</span>
-                              ) : (
-                                <div className="sidebar-item-actions">
-                                  <button
-                                    className="sidebar-item-action-btn"
-                                    onClick={(e) => startSidebarRename(chat, e)}
-                                    title="Rename"
-                                  >
-                                    <Pencil className="icon-tiny" />
-                                  </button>
-                                  <button
-                                    className="sidebar-item-action-btn delete"
-                                    onClick={(e) => onRequestDeleteChat(chat, e)}
-                                    title="Delete"
-                                  >
-                                    <Trash2 className="icon-tiny" />
-                                  </button>
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))
+                <kbd className="sidebar-search-kbd">⌘K</kbd>
               )}
             </div>
           )}
 
+          {sidebarOpen && <SidebarNudgeBanner />}
+
           {sidebarOpen && (
-            <div style={{ marginTop: 'var(--space-xl)', paddingTop: 'var(--space-lg)', borderTop: '1px solid var(--color-hairline)' }}>
-              <div className="sidebar-section-header" style={{ marginBottom: 'var(--space-sm)' }}>
+            <div ref={sidebarSessionListRef} className="sidebar-session-list">
+              {(() => {
+                const nonWorkspaceChats = chats.filter(c => !c.is_workspace_chat);
+                const displayedChats = sidebarSearchQuery.trim()
+                  ? nonWorkspaceChats.filter(c => {
+                      const title = getChatTitle(c).toLowerCase();
+                      const doc = (c.doc_filename || c.document_name || c.display_name || '').toLowerCase();
+                      const q = sidebarSearchQuery.toLowerCase();
+                      return title.includes(q) || doc.includes(q);
+                    })
+                  : nonWorkspaceChats;
+
+                if (displayedChats.length === 0) {
+                  return (
+                    <div className="sidebar-empty">
+                      {sidebarSearchQuery.trim()
+                        ? `No sessions matching "${sidebarSearchQuery}"`
+                        : 'No sessions yet. Start with "+ New Session" above.'}
+                    </div>
+                  );
+                }
+
+                return groupChatsByPeriod(displayedChats).map(group => (
+                  <div key={group.title} className="sidebar-group">
+                    <div className="sidebar-group-label">{group.title}</div>
+                    <div className="sidebar-group-items">
+                      {group.items.map(chat => {
+                        const docType = getChatDocType(chat);
+                        return (
+                          <div
+                            key={chat.id}
+                            className={`sidebar-session-item ${activeChat?.id === chat.id ? 'active' : ''} ${chat.isOptimistic ? 'is-optimistic' : ''} sidebar-session-item-hoverable`}
+                            onClick={() => renamingChatId !== chat.id && selectChat(chat)}
+                          >
+                            {renamingChatId === chat.id ? (
+                              <form
+                                onSubmit={(e) => handleSidebarRename(chat, e)}
+                                style={{ flex: 1, display: 'flex', gap: '4px', alignItems: 'center' }}
+                                onClick={e => e.stopPropagation()}
+                              >
+                                <input
+                                  autoFocus
+                                  className="text-input"
+                                  value={renamingValue}
+                                  onChange={e => setRenamingValue(e.target.value)}
+                                  maxLength={60}
+                                  style={{ flex: 1, height: '26px', fontSize: '12px', padding: '2px 8px' }}
+                                  onBlur={() => setRenamingChatId(null)}
+                                  onKeyDown={e => e.key === 'Escape' && setRenamingChatId(null)}
+                                />
+                                <button type="submit" className="btn-ghost" style={{ color: 'var(--color-accent-green)', padding: '2px' }} title="Save">✓</button>
+                              </form>
+                            ) : (
+                              <>
+                                {docType ? (
+                                  <FileText className={`icon-small session-item-icon session-doc-icon ${docType.toLowerCase()}`} />
+                                ) : (
+                                  <MessageSquare className="icon-small session-item-icon" />
+                                )}
+                                <div className="session-item-content">
+                                  <div className="session-item-header-row">
+                                    <div className="session-item-name">{getChatTitle(chat)}</div>
+                                    {docType && (
+                                      <span className={`session-doc-badge ${docType.toLowerCase()}`}>
+                                        {docType}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {chat.created_at && (
+                                    <div className="session-item-time">
+                                      {formatRelativeTime(chat.created_at)}
+                                    </div>
+                                  )}
+                                </div>
+                                {chat.isOptimistic ? (
+                                  <span className="session-item-optimistic">creating...</span>
+                                ) : (
+                                  <div className="sidebar-item-actions">
+                                    <button
+                                      className="sidebar-item-action-btn"
+                                      onClick={(e) => startSidebarRename(chat, e)}
+                                      title="Rename"
+                                    >
+                                      <Pencil className="icon-tiny" />
+                                    </button>
+                                    <button
+                                      className="sidebar-item-action-btn delete"
+                                      onClick={(e) => onRequestDeleteChat(chat, e)}
+                                      title="Delete"
+                                    >
+                                      <Trash2 className="icon-tiny" />
+                                    </button>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+          )}
+
+          {sidebarOpen && (
+            <div className="sidebar-workspaces-section">
+              <div className="sidebar-section-header">
                 <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}>
                   <FolderPlus className="icon-small" /> WORKSPACES ({workspaces.length})
                 </span>
+                {workspaces.length > 0 && (
+                  <button 
+                    className="btn-ghost" 
+                    onClick={() => {
+                      setWorkspaceName('');
+                      setSelectedChatIds([]);
+                      setShowCreateWorkspaceModal(true);
+                    }}
+                    title="Create Workspace"
+                    style={{ padding: '2px 4px', color: 'var(--color-body-mid)' }}
+                  >
+                    <Plus className="icon-tiny" />
+                  </button>
+                )}
               </div>
 
-              <div className="sidebar-session-list">
-                {workspaces.length === 0 ? (
-                  <div className="sidebar-empty">No active workspaces</div>
-                ) : (
-                  workspaces.map(ws => {
+              {workspaces.length === 0 ? (
+                <div className="sidebar-workspace-feature-card">
+                  <div className="workspace-feature-header">
+                    <div className="workspace-feature-icon-box">
+                      <Folder className="icon-small" />
+                    </div>
+                    <div className="workspace-feature-text">
+                      <div className="workspace-feature-title">Multi-Doc Synthesis</div>
+                      <div className="workspace-feature-desc">
+                        Cross-reference and analyze up to 4 documents in a shared intelligence context.
+                      </div>
+                    </div>
+                  </div>
+                  <button 
+                    type="button" 
+                    className="workspace-feature-btn"
+                    onClick={() => {
+                      setWorkspaceName('');
+                      setSelectedChatIds([]);
+                      setShowCreateWorkspaceModal(true);
+                    }}
+                  >
+                    <Plus className="icon-tiny" />
+                    <span>Create Workspace</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="sidebar-session-list" style={{ marginTop: 'var(--space-xs)' }}>
+                  {workspaces.map(ws => {
                     const isCollapsed = collapsedWorkspaces.has(ws.id);
                     const toggleCollapse = () => {
                       setCollapsedWorkspaces(prev => {
@@ -1410,9 +1543,9 @@ const Dashboard = () => {
                         )}
                       </div>
                     );
-                  })
-                )}
-              </div>
+                  })}
+                </div>
+              )}
             </div>
           )}
 
