@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { 
   User, Mail, Calendar, Shield, Edit2, Check, X, 
-  Trash2, AlertTriangle, RefreshCw, Sparkles, FileText, Search, Database, Lock
+  Trash2, AlertTriangle, RefreshCw, Sparkles, FileText, Search, Database, Lock,
+  Copy, ChevronDown, ChevronRight, Upload, ExternalLink, Zap
 } from '../components/icons';
 import apiClient from '../api/client';
 import NavigationBar from '../components/NavigationBar';
@@ -11,13 +12,20 @@ import NavigationBar from '../components/NavigationBar';
 const ProfilePage = () => {
   const { user, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
+  const avatarInputRef = useRef(null);
   
   const [profile, setProfile] = useState(null);
+  const [usage, setUsage] = useState(null);
+  const [recentDocs, setRecentDocs] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
+  const [copiedUuid, setCopiedUuid] = useState(false);
+  const [copiedEmail, setCopiedEmail] = useState(false);
+  const [isDangerOpen, setIsDangerOpen] = useState(false);
 
   // Delete Modal state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -27,17 +35,47 @@ const ProfilePage = () => {
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    fetchProfile();
+    fetchData();
   }, []);
 
-  const fetchProfile = async () => {
+  const fetchData = async () => {
+    setLoading(true);
     try {
-      const res = await apiClient.get('/users/me');
-      setProfile(res.data);
-      setEditName(res.data.display_name || '');
+      const [profileRes, usageRes, docsRes] = await Promise.allSettled([
+        apiClient.get('/users/me'),
+        apiClient.get('/users/me/usage'),
+        apiClient.get('/documents', { params: { limit: 3 } })
+      ]);
+
+      let userProfile = null;
+      if (profileRes.status === 'fulfilled') {
+        userProfile = profileRes.value.data;
+        setProfile(userProfile);
+        setEditName(userProfile.display_name || '');
+      } else {
+        throw profileRes.reason;
+      }
+
+      if (usageRes.status === 'fulfilled') {
+        setUsage(usageRes.value.data);
+      } else {
+        setUsage({
+          queries_used: userProfile?.total_queries || 0,
+          queries_limit: 100,
+          documents_used: userProfile?.total_documents || 0,
+          documents_limit: 10,
+          storage_used_mb: userProfile?.storage_used_mb || 0,
+          storage_limit_mb: 100,
+          plan: userProfile?.plan || 'free'
+        });
+      }
+
+      if (docsRes.status === 'fulfilled' && Array.isArray(docsRes.value.data)) {
+        setRecentDocs(docsRes.value.data.slice(0, 3));
+      }
     } catch (err) {
-      console.error('Failed to load profile:', err);
-      setSaveStatus({ type: 'error', message: 'Failed to load profile' });
+      console.error('Failed to load profile data:', err);
+      setSaveStatus({ type: 'error', message: 'Failed to load profile data' });
     } finally {
       setLoading(false);
     }
@@ -57,7 +95,7 @@ const ProfilePage = () => {
       setProfile(res.data);
       setIsEditing(false);
       if (refreshUser) refreshUser();
-      setSaveStatus({ type: 'success', message: 'Profile updated' });
+      setSaveStatus({ type: 'success', message: 'Display name updated' });
       setTimeout(() => setSaveStatus(null), 3000);
     } catch (err) {
       setSaveStatus({ 
@@ -67,6 +105,68 @@ const ProfilePage = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setSaveStatus({ type: 'error', message: 'Please select a valid image file (PNG/JPG)' });
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      setSaveStatus({ type: 'error', message: 'Image size must be under 2MB' });
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setAvatarUploading(true);
+    try {
+      const res = await apiClient.post('/users/me/avatar', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      if (res.data?.avatar_url) {
+        setProfile(prev => ({ ...prev, avatar_url: res.data.avatar_url }));
+        if (refreshUser) await refreshUser();
+        setSaveStatus({ type: 'success', message: 'Avatar updated successfully' });
+        setTimeout(() => setSaveStatus(null), 3000);
+      }
+    } catch (err) {
+      console.error('Avatar upload failed:', err);
+      setSaveStatus({
+        type: 'error',
+        message: err.response?.data?.detail || 'Failed to upload avatar'
+      });
+    } finally {
+      setAvatarUploading(false);
+      if (avatarInputRef.current) {
+        avatarInputRef.current.value = '';
+      }
+    }
+  };
+
+  const copyToClipboard = (text, type) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    if (type === 'uuid') {
+      setCopiedUuid(true);
+      setTimeout(() => setCopiedUuid(false), 2000);
+    } else if (type === 'email') {
+      setCopiedEmail(true);
+      setTimeout(() => setCopiedEmail(false), 2000);
+    }
+  };
+
+  const formatFileSize = (bytes) => {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
   const handleConfirmDelete = async (e) => {
@@ -101,11 +201,13 @@ const ProfilePage = () => {
         <main className="main-content page-container">
           <div className="page-header-title">
             <h2 className="page-title">User Profile</h2>
-            <p className="page-subtitle">Manage workspace identity, view activity stats, and account settings.</p>
+            <p className="page-subtitle">Loading workspace identity and usage telemetry...</p>
           </div>
-          <div className="profile-layout-grid">
-            <div className="glass-panel profile-hero-card skeleton" style={{ height: 320 }} />
-            <div className="glass-panel profile-details-card skeleton" style={{ height: 320 }} />
+          <div className="profile-bento-grid">
+            <div className="bento-card bento-identity skeleton" style={{ minHeight: 340 }} />
+            <div className="bento-card bento-quotas skeleton" style={{ minHeight: 340 }} />
+            <div className="bento-card bento-telemetry skeleton" style={{ minHeight: 220 }} />
+            <div className="bento-card bento-activity skeleton" style={{ minHeight: 220 }} />
           </div>
         </main>
       </div>
@@ -121,7 +223,7 @@ const ProfilePage = () => {
             <AlertTriangle className="icon-lg text-danger" />
             <h3>Failed to Load Profile</h3>
             <p>We encountered an issue connecting to your user profile session.</p>
-            <button className="btn primary-btn mt-4" onClick={fetchProfile}>
+            <button className="btn primary-btn mt-4" onClick={fetchData}>
               <RefreshCw className="icon-sm" />
               <span>Retry Connection</span>
             </button>
@@ -130,6 +232,18 @@ const ProfilePage = () => {
       </div>
     );
   }
+
+  const docLimit = usage?.documents_limit || 10;
+  const docsUsed = usage?.documents_used ?? profile.total_documents ?? 0;
+  const docPct = Math.min(Math.round((docsUsed / docLimit) * 100), 100);
+
+  const storageLimit = usage?.storage_limit_mb || 100;
+  const storageUsed = usage?.storage_used_mb ?? profile.storage_used_mb ?? 0;
+  const storagePct = Math.min(Math.round((storageUsed / storageLimit) * 100), 100);
+
+  const queryLimit = usage?.queries_limit || 100;
+  const queriesUsed = usage?.queries_used ?? profile.total_queries ?? 0;
+  const queryPct = Math.min(Math.round((queriesUsed / queryLimit) * 100), 100);
 
   return (
     <div className="app-layout">
@@ -140,167 +254,369 @@ const ProfilePage = () => {
         <div className="page-header-title">
           <h1 className="page-title">User Profile & Identity</h1>
           <p className="page-subtitle">
-            Manage your display identity, view document usage metrics, and security settings.
+            Manage your workspace identity, monitor tier quota capacity, and account telemetry.
           </p>
         </div>
 
-        {/* Profile Grid */}
-        <div className="profile-layout-grid">
-          {/* Left Column: Avatar & Quick Metrics */}
-          <div className="glass-panel profile-hero-card">
-            <div className="avatar-wrapper">
-              <div className="avatar-circle-lg overflow-hidden">
-                {profile.avatar_url ? (
-                  <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+        {/* Modern Bento Grid */}
+        <div className="profile-bento-grid">
+          {/* Bento 1: Identity & Persona (Span 5) */}
+          <div className="bento-card bento-identity">
+            <div className="identity-hero-top">
+              <div 
+                className="profile-avatar-container" 
+                title="Click to change profile picture"
+                onClick={() => !avatarUploading && avatarInputRef.current?.click()}
+              >
+                {avatarUploading ? (
+                  <RefreshCw className="icon-md animate-spin" />
+                ) : profile.avatar_url ? (
+                  <img src={profile.avatar_url} alt="Avatar" className="profile-avatar-img" />
                 ) : (
                   (profile.display_name || profile.email)?.[0]?.toUpperCase() || 'U'
                 )}
-              </div>
-              <span className="user-role-badge">{profile.role || 'Workspace Member'}</span>
-            </div>
 
-            {isEditing ? (
-              <div className="profile-edit-box">
-                <input
-                  type="text"
-                  className="profile-input-field"
-                  value={editName}
-                  onChange={e => setEditName(e.target.value)}
-                  placeholder="Display name"
-                  maxLength={60}
-                  autoFocus
-                  onKeyDown={e => e.key === 'Enter' && handleSave()}
-                />
-                <div className="profile-edit-btn-group">
-                  <button 
-                    type="button"
-                    className="btn outline-btn btn-sm" 
-                    onClick={() => {
-                      setIsEditing(false);
-                      setEditName(profile.display_name || '');
-                    }} 
-                    disabled={saving}
-                  >
-                    <X className="icon-xs" />
-                  </button>
-                  <button 
-                    type="button"
-                    className="btn primary-btn btn-sm" 
-                    onClick={handleSave} 
-                    disabled={saving}
-                  >
-                    {saving ? <RefreshCw className="icon-xs animate-spin" /> : <Check className="icon-xs" />}
-                  </button>
+                <div className="avatar-upload-overlay">
+                  <Upload className="icon-xs" />
+                  <span>{avatarUploading ? 'Uploading...' : 'Change'}</span>
                 </div>
               </div>
-            ) : (
-              <div className="profile-name-row">
-                <h2>{profile.display_name || profile.username || 'Workspace User'}</h2>
-                <button 
-                  type="button"
-                  className="btn-icon text-btn" 
-                  title="Edit Display Name"
-                  onClick={() => setIsEditing(true)}
-                >
-                  <Edit2 className="icon-sm" />
-                </button>
-              </div>
-            )}
 
-            <div className="profile-email-badge">
-              <Mail className="icon-xs" />
-              <span>{profile.email}</span>
+              {/* Hidden file input for avatar upload */}
+              <input 
+                type="file" 
+                ref={avatarInputRef} 
+                onChange={handleAvatarChange} 
+                accept="image/*" 
+                style={{ display: 'none' }} 
+              />
+
+              <div className="identity-meta-group">
+                <span className="identity-role-pill">
+                  {profile.role || 'Researcher'}
+                </span>
+
+                {isEditing ? (
+                  <div className="profile-edit-box mt-2">
+                    <input
+                      type="text"
+                      className="profile-input-field"
+                      value={editName}
+                      onChange={e => setEditName(e.target.value)}
+                      placeholder="Display name"
+                      maxLength={60}
+                      autoFocus
+                      onKeyDown={e => e.key === 'Enter' && handleSave()}
+                    />
+                    <div className="profile-edit-btn-group">
+                      <button 
+                        type="button"
+                        className="btn outline-btn btn-sm" 
+                        onClick={() => {
+                          setIsEditing(false);
+                          setEditName(profile.display_name || '');
+                        }} 
+                        disabled={saving}
+                      >
+                        <X className="icon-xs" />
+                      </button>
+                      <button 
+                        type="button"
+                        className="btn primary-btn btn-sm" 
+                        onClick={handleSave} 
+                        disabled={saving}
+                      >
+                        {saving ? <RefreshCw className="icon-xs animate-spin" /> : <Check className="icon-xs" />}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="identity-name-row">
+                    <h2>{profile.display_name || profile.username || 'Workspace User'}</h2>
+                    <button 
+                      type="button"
+                      className="btn-icon text-btn" 
+                      title="Edit Display Name"
+                      onClick={() => setIsEditing(true)}
+                    >
+                      <Edit2 className="icon-sm" />
+                    </button>
+                  </div>
+                )}
+
+                {profile.username && (
+                  <span className="identity-username-handle">@{profile.username}</span>
+                )}
+              </div>
             </div>
 
-            {/* Quick Metrics */}
-            <div className="profile-metrics-grid">
-              <div className="metric-box">
-                <Search className="icon metric-icon text-accent" />
-                <span className="metric-num">{profile.total_queries ?? 0}</span>
-                <span className="metric-lbl">Total Queries</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
+              <button 
+                type="button"
+                className="identity-email-pill"
+                onClick={() => copyToClipboard(profile.email, 'email')}
+                title="Click to copy email address"
+              >
+                <Mail className="icon-xs" />
+                <span>{profile.email}</span>
+                {copiedEmail ? (
+                  <Check className="icon-xs text-success" />
+                ) : (
+                  <Copy className="icon-xs" style={{ opacity: 0.5 }} />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Bento 2: Tier & Quotas Visualizer (Span 7) */}
+          <div className="bento-card bento-quotas">
+            <div>
+              <div className="bento-header">
+                <div className="bento-header-left">
+                  <div className="bento-icon-badge">
+                    <Database className="icon" />
+                  </div>
+                  <h3 className="bento-title">Workspace Quotas & Limits</h3>
+                </div>
+                <span className="plan-badge-pill">
+                  <Sparkles className="icon-xs" />
+                  <span>{profile.plan || 'Free'} Tier</span>
+                </span>
               </div>
 
-              <div className="metric-box">
-                <FileText className="icon metric-icon text-accent" />
-                <span className="metric-num">{profile.total_documents ?? 0}</span>
-                <span className="metric-lbl">Indexed Docs</span>
+              {/* Progress Bars */}
+              <div className="quotas-stack">
+                {/* 1. Documents */}
+                <div className="quota-item">
+                  <div className="quota-label-row">
+                    <span className="quota-type">
+                      <FileText className="icon-sm text-accent" />
+                      <span>Indexed Documents</span>
+                    </span>
+                    <span className="quota-fraction">
+                      <strong>{docsUsed}</strong> / {docLimit >= 999999 ? '∞' : docLimit} docs ({docPct}%)
+                    </span>
+                  </div>
+                  <div className="quota-bar-track">
+                    <div 
+                      className="quota-bar-fill fill-sunset" 
+                      style={{ width: `${Math.max(docPct, 2)}%` }} 
+                    />
+                  </div>
+                </div>
+
+                {/* 2. Vector Storage */}
+                <div className="quota-item">
+                  <div className="quota-label-row">
+                    <span className="quota-type">
+                      <Database className="icon-sm" style={{ color: '#06b6d4' }} />
+                      <span>Vector Embeddings Storage</span>
+                    </span>
+                    <span className="quota-fraction">
+                      <strong>{storageUsed} MB</strong> / {storageLimit >= 999999 ? '∞' : `${storageLimit} MB`} ({storagePct}%)
+                    </span>
+                  </div>
+                  <div className="quota-bar-track">
+                    <div 
+                      className="quota-bar-fill fill-cyan" 
+                      style={{ width: `${Math.max(storagePct, 2)}%` }} 
+                    />
+                  </div>
+                </div>
+
+                {/* 3. Query Limit */}
+                <div className="quota-item">
+                  <div className="quota-label-row">
+                    <span className="quota-type">
+                      <Search className="icon-sm" style={{ color: '#10b981' }} />
+                      <span>Monthly Research Queries</span>
+                    </span>
+                    <span className="quota-fraction">
+                      <strong>{queriesUsed}</strong> / {queryLimit >= 999999 ? '∞' : queryLimit} ({queryPct}%)
+                    </span>
+                  </div>
+                  <div className="quota-bar-track">
+                    <div 
+                      className="quota-bar-fill fill-green" 
+                      style={{ width: `${Math.max(queryPct, 2)}%` }} 
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Quota Perks Callout */}
+            <div className="quota-perks-box">
+              <div className="quota-perks-text">
+                <Sparkles className="icon-sm text-accent" />
+                <span>
+                  Upgrade to <strong>Pro</strong> for 100 docs, 5GB storage, and Gemini 1.5 Pro synthesis.
+                </span>
+              </div>
+              <Link to="/settings" className="btn outline-btn btn-sm" style={{ whiteSpace: 'nowrap' }}>
+                <span>View Plans</span>
+              </Link>
+            </div>
+          </div>
+
+          {/* Bento 3: Account Telemetry (Span 5) */}
+          <div className="bento-card bento-telemetry">
+            <div className="bento-header">
+              <div className="bento-header-left">
+                <div className="bento-icon-badge" style={{ backgroundColor: 'rgba(6, 182, 212, 0.12)', color: '#06b6d4', borderColor: 'rgba(6, 182, 212, 0.25)' }}>
+                  <Shield className="icon" />
+                </div>
+                <h3 className="bento-title">Account Telemetry</h3>
+              </div>
+            </div>
+
+            <div className="telemetry-list">
+              <div className="telemetry-row">
+                <span className="telemetry-label">
+                  <User className="icon-xs" />
+                  <span>Unique User ID</span>
+                </span>
+                <button 
+                  type="button" 
+                  className={`copy-uuid-btn ${copiedUuid ? 'copied' : ''}`}
+                  onClick={() => copyToClipboard(profile.id, 'uuid')}
+                  title="Click to copy User ID"
+                >
+                  <span>{profile.id ? `${profile.id.slice(0, 8)}...${profile.id.slice(-4)}` : 'N/A'}</span>
+                  {copiedUuid ? <Check className="icon-xs text-success" /> : <Copy className="icon-xs" />}
+                </button>
               </div>
 
-              <div className="metric-box">
-                <Database className="icon metric-icon text-accent" />
-                <span className="metric-num">{profile.storage_used_mb ?? 0} MB</span>
-                <span className="metric-lbl">Vector Storage</span>
+              <div className="telemetry-row">
+                <span className="telemetry-label">
+                  <Shield className="icon-xs" />
+                  <span>Session Status</span>
+                </span>
+                <span className="session-pulse-badge">
+                  <div className="pulse-circle" />
+                  <span>{profile.last_login ? 'Active Session' : 'Active Session'}</span>
+                </span>
+              </div>
+
+              <div className="telemetry-row">
+                <span className="telemetry-label">
+                  <Calendar className="icon-xs" />
+                  <span>Member Since</span>
+                </span>
+                <span className="telemetry-value">
+                  {new Date(profile.created_at || Date.now()).toLocaleDateString('en-US', {
+                    year: 'numeric', month: 'short', day: 'numeric'
+                  })}
+                </span>
+              </div>
+
+              <div className="telemetry-row">
+                <span className="telemetry-label">
+                  <Zap className="icon-xs" />
+                  <span>Inference Engine</span>
+                </span>
+                <span className="telemetry-value" style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--color-accent-sunset)' }}>
+                  Gemini 1.5 Flash
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Right Column: Account Meta & Danger Zone */}
-          <div className="profile-details-stack">
-            {/* Account Details Card */}
-            <div className="glass-panel profile-info-card">
-              <div className="card-header-bar">
-                <Shield className="icon text-accent" />
-                <h3>Account Meta & Session</h3>
+          {/* Bento 4: Recent Workspace Activity (Span 7) */}
+          <div className="bento-card bento-activity">
+            <div className="bento-header">
+              <div className="bento-header-left">
+                <div className="bento-icon-badge" style={{ backgroundColor: 'rgba(16, 185, 129, 0.12)', color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.25)' }}>
+                  <FileText className="icon" />
+                </div>
+                <h3 className="bento-title">Recent Indexed Documents</h3>
               </div>
-
-              <div className="info-rows-list">
-                <div className="info-row">
-                  <span className="info-key">Member Since</span>
-                  <span className="info-val">
-                    <Calendar className="icon-xs" />
-                    {new Date(profile.created_at || Date.now()).toLocaleDateString('en-US', {
-                      year: 'numeric', month: 'short', day: 'numeric'
-                    })}
-                  </span>
-                </div>
-
-                <div className="info-row">
-                  <span className="info-key">Last Login</span>
-                  <span className="info-val">
-                    {profile.last_login 
-                      ? new Date(profile.last_login).toLocaleString()
-                      : 'Active Session'
-                    }
-                  </span>
-                </div>
-
-                <div className="info-row">
-                  <span className="info-key">Current Tier Plan</span>
-                  <span className={`plan-pill plan-${(profile.plan || 'free').toLowerCase()}`}>
-                    {profile.plan || 'Free'}
-                  </span>
-                </div>
-
-                <div className="info-row">
-                  <span className="info-key">Unique User ID</span>
-                  <span className="info-val mono-text">{profile.id}</span>
-                </div>
-              </div>
+              <Link to="/library" className="btn text-btn btn-sm" style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span>All Documents</span>
+                <ChevronRight className="icon-xs" />
+              </Link>
             </div>
 
-            {/* Danger Zone Card */}
-            <div className="glass-panel danger-zone-card">
-              <div className="card-header-bar text-danger">
-                <AlertTriangle className="icon" />
+            {recentDocs && recentDocs.length > 0 ? (
+              <div className="activity-list">
+                {recentDocs.map((doc) => (
+                  <Link 
+                    key={doc.id} 
+                    to="/library" 
+                    className="activity-item"
+                    title={`Open ${doc.filename}`}
+                  >
+                    <div className="activity-left">
+                      <div className="activity-file-icon">
+                        <FileText className="icon-xs" />
+                      </div>
+                      <span className="activity-file-name">{doc.filename}</span>
+                    </div>
+                    <div className="activity-right">
+                      <span>{formatFileSize(doc.size_bytes)}</span>
+                      <span>•</span>
+                      <span>
+                        {new Date(doc.uploaded_at || Date.now()).toLocaleDateString('en-US', {
+                          month: 'short', day: 'numeric'
+                        })}
+                      </span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="activity-empty-box">
+                <Search className="icon-lg" style={{ opacity: 0.3 }} />
+                <span>No documents indexed yet in your workspace</span>
+                <Link to="/" className="btn outline-btn btn-sm mt-2">
+                  <span>Drop Document in Query Hub</span>
+                </Link>
+              </div>
+            )}
+          </div>
+
+          {/* Bento 5: Collapsible Danger Zone Accordion (Span 12) */}
+          <div className="bento-danger-accordion">
+            <button 
+              type="button" 
+              className="danger-accordion-toggle"
+              onClick={() => setIsDangerOpen(!isDangerOpen)}
+              aria-expanded={isDangerOpen}
+            >
+              <div className="danger-toggle-left">
+                <AlertTriangle className="icon-sm text-danger" />
                 <h3>Danger Zone</h3>
+                <span className="danger-toggle-subtitle">Account Deletion & Vector Data Purge</span>
               </div>
-              <p className="danger-zone-desc">
-                Permanently remove your account, clear vector indexes, and purge all uploaded document files from Lexis.
-              </p>
-              <button 
-                type="button"
-                className="btn danger-btn" 
-                onClick={() => {
-                  setShowDeleteModal(true);
-                  setPassword('');
-                  setConfirmText('');
-                  setDeleteError('');
-                }}
-              >
-                <Trash2 className="icon-sm" />
-                <span>Delete Account & Purge Data</span>
-              </button>
-            </div>
+              <ChevronDown 
+                className="icon-sm text-danger" 
+                style={{ 
+                  transform: isDangerOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.2s ease'
+                }} 
+              />
+            </button>
+
+            {isDangerOpen && (
+              <div className="danger-accordion-content">
+                <p className="danger-content-text">
+                  Permanently remove your account, clear vector embeddings, and purge all indexed documents and chat histories from Lexis object storage. This action is irreversible.
+                </p>
+                <button 
+                  type="button"
+                  className="danger-btn-bento"
+                  onClick={() => {
+                    setShowDeleteModal(true);
+                    setPassword('');
+                    setConfirmText('');
+                    setDeleteError('');
+                  }}
+                >
+                  <Trash2 className="icon-xs" />
+                  <span>Delete Account & Purge Data</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -323,7 +639,7 @@ const ProfilePage = () => {
             className="modal-card modal-card-danger glass-panel"
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyBetween: 'space-between', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <AlertTriangle className="icon-lg text-danger" />
                 <div>
