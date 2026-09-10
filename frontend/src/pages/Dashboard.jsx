@@ -1159,7 +1159,7 @@ const Dashboard = () => {
 
               <div className="sidebar-session-list">
                 {workspaces.length === 0 ? (
-                  <div className="sidebar-empty">NO WORKSPACES ACTIVE</div>
+                  <div className="sidebar-empty">No active workspaces</div>
                 ) : (
                   workspaces.map(ws => {
                     const isCollapsed = collapsedWorkspaces.has(ws.id);
@@ -1328,7 +1328,7 @@ const Dashboard = () => {
                   <Upload className="icon-large" />
                 </div>
                 <div className="upload-zone-text">
-                  DRAG & DROP PDF, DOCX, TXT FILES HERE OR <span style={{ color: '#f68d1f' }}>CLICK TO BROWSE</span>
+                  Drop PDF, DOCX, or TXT documents here, or <span style={{ color: 'var(--color-accent-sunset)' }}>browse files</span>
                 </div>
                 <div className="upload-zone-hint">
                   Automatic chunking, vector embedding, and citation matching
@@ -1360,7 +1360,7 @@ const Dashboard = () => {
                   {m.system_warning && (
                     <div className="system-warning-pill">
                       <AlertTriangle className="icon-small" />
-                      <span>⚠️ {m.system_warning}</span>
+                      <span>{m.system_warning}</span>
                     </div>
                   )}
                   {m.role === 'user' || m.is_error ? (

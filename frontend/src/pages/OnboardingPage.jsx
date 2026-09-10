@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
 import SpotlightTour from '../components/SpotlightTour';
-import { User, Sparkles, CheckCircle, Upload, ArrowRight, BookOpen, AlertTriangle, LexisLogo } from '../components/icons';
+import { User, Compass, CheckCircle, Upload, ArrowRight, BookOpen, AlertTriangle, LexisLogo } from '../components/icons';
 
 const ROLES = [
   'Student',
@@ -14,10 +14,10 @@ const ROLES = [
 ];
 
 const DEFAULT_AVATARS = [
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80'
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' rx='40' fill='%2318181b'/%3E%3Cpolygon points='40,16 64,56 16,56' fill='none' stroke='%23ff7a17' stroke-width='4'/%3E%3Ccircle cx='40' cy='42' r='5' fill='%23ffc285'/%3E%3C/svg%3E",
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' rx='40' fill='%2318181b'/%3E%3Ccircle cx='40' cy='40' r='20' fill='none' stroke='%23dadbdf' stroke-width='3' stroke-dasharray='4 2'/%3E%3Ccircle cx='40' cy='40' r='6' fill='%23ff7a17'/%3E%3C/svg%3E",
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' rx='40' fill='%2318181b'/%3E%3Cpath d='M40 20 L60 32 L40 44 L20 32 Z' fill='%23ff7a17' fill-opacity='0.8'/%3E%3Cpath d='M20 32 L40 44 L40 64 L20 52 Z' fill='%2371717a'/%3E%3Cpath d='M60 32 L40 44 L40 64 L60 52 Z' fill='%23a1a1aa'/%3E%3C/svg%3E",
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' rx='40' fill='%2318181b'/%3E%3Cline x1='24' y1='40' x2='56' y2='40' stroke='%2306b6d4' stroke-width='3'/%3E%3Cline x1='40' y1='24' x2='40' y2='56' stroke='%2306b6d4' stroke-width='3'/%3E%3Ccircle cx='40' cy='40' r='8' fill='%2306b6d4'/%3E%3C/svg%3E"
 ];
 
 const OnboardingPage = () => {
@@ -193,9 +193,9 @@ const OnboardingPage = () => {
         {step === 1 && (
           <form onSubmit={handleSubmitProfile} className="onboarding-body">
             <div>
-              <h1 className="onboarding-title">Welcome to LEXIS! 🎉</h1>
+              <h1 className="onboarding-title">Initialize Workspace</h1>
               <p className="onboarding-subtitle">
-                Let's set up your profile to personalize your RAG search workspace.
+                Configure your operator profile to personalize your RAG search workspace.
               </p>
             </div>
 
@@ -324,13 +324,13 @@ const OnboardingPage = () => {
         {step === 2 && (
           <div className="onboarding-body" style={{ textAlign: 'center', alignItems: 'center' }}>
             <div className="avatar-preview-circle" style={{ width: 80, height: 80, margin: '0 auto' }}>
-              <Sparkles className="icon-lg text-accent" />
+              <Compass className="icon-lg text-accent" />
             </div>
 
             <div>
-              <h2 className="onboarding-title">Profile Updated!</h2>
+              <h2 className="onboarding-title">Profile Configured</h2>
               <p className="onboarding-subtitle" style={{ maxWidth: 360, margin: '8px auto 0 auto' }}>
-                Would you like a 60-second interactive tour of the LEXIS RAG interface?
+                Would you like an interactive walkthrough of the LEXIS RAG interface?
               </p>
             </div>
 
@@ -339,8 +339,8 @@ const OnboardingPage = () => {
                 onClick={handleStartTour}
                 className="btn primary-btn btn-full"
               >
-                <Sparkles className="icon-sm" />
-                <span>Take Interactive Tour</span>
+                <Compass className="icon-sm" />
+                <span>Explore Workspace Interface</span>
               </button>
 
               <button
@@ -361,7 +361,7 @@ const OnboardingPage = () => {
             </div>
 
             <div>
-              <h2 className="onboarding-title">You're All Set! 🎉</h2>
+              <h2 className="onboarding-title">Workspace Configured</h2>
               <p className="onboarding-subtitle" style={{ maxWidth: 360, margin: '8px auto 0 auto' }}>
                 Your profile is active. Start querying your documents or perform live web searches.
               </p>

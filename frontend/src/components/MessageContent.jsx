@@ -5,7 +5,7 @@ import remarkBreaks from 'remark-breaks';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import { useTheme } from '../context/ThemeContext';
-import { Globe } from './icons';
+import { Globe, FileText } from './icons';
 
 // Simple Citation Badge Component
 const CitationBadge = ({ citation, label, onClick }) => {
@@ -22,7 +22,8 @@ const CitationBadge = ({ citation, label, onClick }) => {
         if (onClick) onClick();
       }}
     >
-      {label || 'Source'}
+      <FileText className="w-3 h-3 inline-block mr-1 opacity-70" />
+      <span className="tabular-nums">{label || 'Source'}</span>
     </span>
   );
 };
@@ -74,15 +75,15 @@ export const MessageContent = ({ content, citations, onCitationClick }) => {
       return `[Source](http://cite/${docId})`;
     });
 
-    // 2. Convert [Page N] -> [📄 Page N](http://page/N)
+    // 2. Convert [Page N] -> [Page N](http://page/N)
     processed = processed.replace(/\[(?:Page|page|p\.)\s*(\d+(?:\s*,\s*\d+)*)\]/g, (_, pageNum) => {
-      return `[📄 Page ${pageNum}](http://page/${pageNum})`;
+      return `[Page ${pageNum}](http://page/${pageNum})`;
     });
 
-    // 3. Convert [Web N: Title](url) -> [🌐 Web N](http://web/url?href=...)
+    // 3. Convert [Web N: Title](url) -> [Web N](http://web/url?href=...)
     processed = processed.replace(/\[Web\s*(\d+)(?::\s*([^\]]+))?\]\((https?:\/\/[^)]+)\)/g, (_, webNum, title, url) => {
       const cleanTitle = title || `Source ${webNum}`;
-      return `[🌐 Web ${webNum}](http://web/url?href=${encodeURIComponent(url)}&title=${encodeURIComponent(cleanTitle)})`;
+      return `[Web ${webNum}](http://web/url?href=${encodeURIComponent(url)}&title=${encodeURIComponent(cleanTitle)})`;
     });
 
     return processed;
@@ -223,7 +224,7 @@ export const MessageContent = ({ content, citations, onCitationClick }) => {
         return (
           <CitationBadge
             citation={pageCit}
-            label={`📄 Page ${pageNum}`}
+            label={`Page ${pageNum}`}
             onClick={() => onCitationClick && onCitationClick(pageCit)}
           />
         );

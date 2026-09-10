@@ -29,6 +29,8 @@
   /* Colors - Accents (Muted & Product Illustrations) */
   --color-accent-sunset: #ff7a17;   /* Orange accent */
   --color-accent-sunset-soft: #ffc285;
+  --color-accent: var(--color-accent-sunset);
+  --color-accent-dim: rgba(255, 122, 23, 0.15);
   --color-accent-dusk: #06b6d4;     /* Cyan accent */
   --color-accent-twilight: #a5f3fc;
   --color-accent-breeze: #a0c3ec;   /* Blue accent */
@@ -84,6 +86,8 @@ html:not(.dark) {
   --color-body: #27272a;            /* Zinc-800 body copy */
   --color-body-mid: #71717a;        /* Zinc-500 secondary body / metadata */
   --color-mute: #a1a1aa;            /* Zinc-400 captions/muted labels */
+  --color-accent: var(--color-accent-sunset, #ea580c);
+  --color-accent-dim: rgba(234, 88, 12, 0.12);
   color-scheme: light;
 }
 
@@ -2623,14 +2627,6 @@ html, body, #root {
   pointer-events: none;
 }
 
-.brand-floating-square {
-  position: absolute;
-  width: 64px;
-  height: 64px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: var(--radius-sm);
-  pointer-events: none;
-}
 
 .brand-content {
   position: relative;
@@ -2678,23 +2674,34 @@ html, body, #root {
   background-color: var(--color-accent-sunset);
 }
 
-.brand-mascot-container {
+.brand-telemetry-badge {
   position: relative;
   z-index: 2;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-md) var(--space-lg);
-  background-color: var(--color-canvas-card);
+  gap: var(--space-sm);
+  padding: 6px 14px;
+  background-color: var(--color-canvas-soft);
   border: 1px solid var(--color-hairline);
   border-radius: var(--radius-pill);
   width: fit-content;
   margin-top: auto;
 }
 
-.mascot-bubble {
-  font-size: 13px;
-  color: var(--color-body);
+.telemetry-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-accent-sunset);
+  box-shadow: 0 0 8px var(--color-accent-sunset);
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.telemetry-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.8px;
+  color: var(--color-body-mid);
 }
 
 /* Right Form Pane */

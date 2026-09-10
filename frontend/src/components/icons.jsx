@@ -34,33 +34,88 @@ export const PanelLeft = createIcon(
   </>
 );
 
-export const LexisLogo = ({ className, size = 16, style, ...props }) => (
-  <svg 
-    width={size} 
-    height={size} 
-    viewBox="0 0 100 100" 
-    xmlns="http://www.w3.org/2000/svg" 
-    aria-hidden="true"
-    className={className || "icon"}
-    style={style}
-    {...props}
-  >
-    <defs>
-      <linearGradient id="lexis-l-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#3B82F6"/>
-        <stop offset="100%" stopColor="#8B5CF6"/>
-      </linearGradient>
-    </defs>
-    <path 
-      d="M28 18 L28 82 L72 82" 
-      stroke="url(#lexis-l-grad)" 
-      strokeWidth="14" 
-      strokeLinecap="round" 
-      strokeLinejoin="round" 
-      fill="none"
-    />
-  </svg>
-);
+export const LexisLogo = ({ className, size = 16, animated = false, style, ...props }) => {
+  const isMicro = Number(size) <= 18;
+
+  return (
+    <svg 
+      width={size} 
+      height={size} 
+      viewBox="0 0 100 100" 
+      xmlns="http://www.w3.org/2000/svg" 
+      aria-hidden="true"
+      className={`${className || "icon"} ${animated ? 'animate-pulse' : ''}`.trim()}
+      style={{ display: 'inline-block', verticalAlign: 'middle', overflow: 'visible', ...style }}
+      {...props}
+    >
+      <defs>
+        {/* Dynamic Refraction Beam: Sunset Amber -> Soft Sunlight -> Transparent */}
+        <linearGradient id="lexis-amber-beam" x1="0%" y1="50%" x2="100%" y2="50%">
+          <stop offset="0%" stopColor="var(--color-accent-sunset, #ff7a17)" stopOpacity="0.95" />
+          <stop offset="55%" stopColor="var(--color-accent-sunset-soft, #ffc285)" stopOpacity="0.45" />
+          <stop offset="100%" stopColor="var(--color-accent-sunset, #ff7a17)" stopOpacity="0" />
+        </linearGradient>
+
+        {/* Right Aperture Facet: Glowing Sunset Amber Gradient */}
+        <linearGradient id="lexis-facet-amber" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="var(--color-accent-sunset-soft, #ffc285)" />
+          <stop offset="100%" stopColor="var(--color-accent-sunset, #ff7a17)" />
+        </linearGradient>
+      </defs>
+
+      {/* Refraction Beam from focal core through right aperture */}
+      <polygon 
+        points="50,54 98,38 98,66" 
+        fill="url(#lexis-amber-beam)" 
+      />
+
+      {/* Facet 1: Left Ascent Plane (Crisp Titanium White) */}
+      <polygon 
+        points="50,14 16,80 50,54" 
+        fill="currentColor"
+        opacity="0.98"
+      />
+
+      {/* Facet 2: Base Horizon Plane (Subtle Titanium Graphite Depth) */}
+      <polygon 
+        points="16,80 84,80 50,54" 
+        fill="currentColor"
+        opacity={isMicro ? "0.65" : "0.52"}
+      />
+
+      {/* Facet 3: Right Refractive Aperture Plane (Sunset Amber) */}
+      <polygon 
+        points="50,14 50,54 84,80" 
+        fill="url(#lexis-facet-amber)" 
+      />
+
+      {/* Architectural Hairline Dividers */}
+      <line 
+        x1="50" y1="14" x2="50" y2="54" 
+        stroke="var(--color-canvas, #0a0a0a)" 
+        strokeWidth={isMicro ? "2.6" : "2"} 
+      />
+      <line 
+        x1="16" y1="80" x2="50" y2="54" 
+        stroke="var(--color-canvas, #0a0a0a)" 
+        strokeWidth={isMicro ? "2.6" : "2"} 
+      />
+      <line 
+        x1="84" y1="80" x2="50" y2="54" 
+        stroke="var(--color-canvas, #0a0a0a)" 
+        strokeWidth={isMicro ? "2.6" : "2"} 
+      />
+
+      {/* Central Aperture Focal Point (Radiant Amber Core) */}
+      <circle 
+        cx="50" 
+        cy="54" 
+        r={isMicro ? "3.6" : "4.2"} 
+        fill="var(--color-accent-sunset, #ff7a17)" 
+      />
+    </svg>
+  );
+};
 
 export const BookOpen = createIcon(
   <>
@@ -461,6 +516,20 @@ export const EyeOff = createIcon(
 export const Sparkles = createIcon(
   <>
     <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z" />
+  </>
+);
+
+export const Compass = createIcon(
+  <>
+    <circle cx="12" cy="12" r="10" />
+    <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+  </>
+);
+
+export const Radio = createIcon(
+  <>
+    <circle cx="12" cy="12" r="2" />
+    <path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14" />
   </>
 );
 

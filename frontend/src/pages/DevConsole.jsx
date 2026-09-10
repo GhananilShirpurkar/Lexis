@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
 import NavigationBar from '../components/NavigationBar';
+import { Key, Zap, User, Radio } from '../components/icons';
 
 function DevConsole() {
   const { token, logout, user } = useAuth();
@@ -45,9 +46,9 @@ function DevConsole() {
         } else {
           const details = data?.detail?.error?.message || JSON.stringify(data);
           if (res.status === 429) {
-            logs.push(`[REQ #${i}] RATE LIMITED (HTTP 429) 🔴 - ${details}`);
+            logs.push(`[REQ #${i}] [HTTP 429 RATE_LIMITED] - ${details}`);
           } else {
-            logs.push(`[REQ #${i}] FAILED (HTTP ${res.status}) ⚠️ - ${details}`);
+            logs.push(`[REQ #${i}] [HTTP ${res.status} FAILED] - ${details}`);
           }
         }
       } catch (err) {
@@ -94,7 +95,7 @@ function DevConsole() {
             <div className="content-panel">
               <div className="section-label-bar" style={{ margin: '-12px -12px 12px -12px' }}>
                 <div className="label-title">
-                  <span>🔑</span>
+                  <Key className="icon-sm text-accent" />
                   <span>AUTHENTICATION DIAGNOSTICS</span>
                 </div>
               </div>
@@ -109,7 +110,7 @@ function DevConsole() {
             <div className="content-panel">
               <div className="section-label-bar" style={{ margin: '-12px -12px 12px -12px' }}>
                 <div className="label-title">
-                  <span>⚡</span>
+                  <Zap className="icon-sm text-accent" />
                   <span>RATE LIMITING STRESS TESTER</span>
                 </div>
               </div>
@@ -138,7 +139,7 @@ function DevConsole() {
             <div className="content-panel">
               <div className="section-label-bar" style={{ margin: '-12px -12px 12px -12px' }}>
                 <div className="label-title">
-                  <span>👤</span>
+                  <User className="icon-sm text-accent" />
                   <span>ACTIVE USER PROFILE METADATA</span>
                 </div>
               </div>
@@ -161,7 +162,7 @@ function DevConsole() {
             <div className="content-panel" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
               <div className="section-label-bar" style={{ margin: '-12px -12px 12px -12px' }}>
                 <div className="label-title">
-                  <span>📡</span>
+                  <Radio className="icon-sm text-accent" />
                   <span>LAST API RESPONSE JSON INSPECTOR</span>
                 </div>
               </div>

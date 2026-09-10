@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LexisLogo } from '../components/icons';
+import { LexisLogo, CheckCircle } from '../components/icons';
 
 const AuthPage = () => {
   const { user, login, register } = useAuth();
@@ -125,14 +125,11 @@ const AuthPage = () => {
         {/* Chamfered background plate behind wordmark */}
         <div className="brand-bg-plate" />
 
-        {/* Floating Accent Amber Squares */}
-        <div className="brand-floating-square" style={{ top: '15%', left: '12%' }} />
-        <div className="brand-floating-square" style={{ top: '22%', right: '15%' }} />
-        <div className="brand-floating-square" style={{ bottom: '20%', left: '16%' }} />
-        <div className="brand-floating-square" style={{ bottom: '28%', right: '12%' }} />
-
         {/* Centered Brand Content */}
         <div className="brand-content">
+          <div style={{ marginBottom: '20px', display: 'inline-flex' }}>
+            <LexisLogo size={54} />
+          </div>
           <h1 className="brand-wordmark">LEXIS</h1>
           <p className="brand-tagline">Retrieval-Augmented Generation Workspace</p>
 
@@ -152,10 +149,10 @@ const AuthPage = () => {
           </div>
         </div>
 
-        {/* Mascot Robot Character & Speech Bubble */}
-        <div className="brand-mascot-container">
-          <div className="mascot-bubble">"Welcome to Lexis! Your documents are waiting."</div>
-          <div style={{ fontSize: '48px', lineHeight: 1 }}>🤖</div>
+        {/* Live Runtime Telemetry Status Pill */}
+        <div className="brand-telemetry-badge">
+          <span className="telemetry-dot" />
+          <span className="telemetry-label">DUAL LLM RUNTIME // RETRIEVAL PIPELINE ACTIVE</span>
         </div>
       </div>
 
@@ -177,7 +174,7 @@ const AuthPage = () => {
           {/* Info message banner (e.g. account deletion) */}
           {location.state?.message && !serverError && (
             <div className="auth-error-banner" style={{ background: 'rgba(16, 185, 129, 0.1)', borderColor: 'rgba(16, 185, 129, 0.3)', color: '#10B981' }} role="status">
-              <span className="auth-error-icon">✅</span>
+              <CheckCircle className="icon-sm" style={{ color: '#10B981', flexShrink: 0 }} />
               <span className="auth-error-text">{location.state.message}</span>
             </div>
           )}
