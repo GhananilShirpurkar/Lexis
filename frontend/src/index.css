@@ -2624,11 +2624,11 @@ html, body, #root {
 }
 
 .brand-logo-frame {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
   background-color: rgba(255, 122, 23, 0.08);
-  border: 1px solid rgba(255, 122, 23, 0.24);
+  border: 1px solid rgba(255, 122, 23, 0.28);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2636,7 +2636,7 @@ html, body, #root {
 }
 
 .brand-name {
-  font-size: 19px;
+  font-size: 21px;
   font-weight: 600;
   letter-spacing: -0.025em;
   color: #ffffff;
@@ -2762,18 +2762,14 @@ html, body, #root {
 }
 
 .quote-avatar {
-  width: 26px;
-  height: 26px;
-  border-radius: 5px;
-  background-color: #1a1c22;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background-color: rgba(255, 122, 23, 0.08);
+  border: 1px solid rgba(255, 122, 23, 0.24);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10.5px;
-  font-weight: 600;
-  color: #c4c7cc;
-  font-family: var(--font-mono);
   flex-shrink: 0;
 }
 
@@ -3010,31 +3006,6 @@ html, body, #root {
 
 .btn-spinner-text {
   font-size: 13.5px;
-}
-
-.auth-secondary-actions {
-  display: flex;
-  justify-content: center;
-  margin-top: -2px;
-}
-
-.auth-demo-action {
-  background: transparent;
-  border: 1px solid #23252a;
-  border-radius: 6px;
-  color: #8e929a;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 6px 14px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  font-family: var(--font-sans);
-}
-
-.auth-demo-action:hover {
-  background-color: #14161a;
-  color: #ffffff;
-  border-color: #363940;
 }
 
 .auth-bottom-switch {

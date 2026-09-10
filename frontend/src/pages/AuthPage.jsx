@@ -109,16 +109,6 @@ const AuthPage = () => {
     }
   };
 
-  const handleFillDemo = () => {
-    setEmail('demo@lexis.internal');
-    setPassword('LexisPass2024!');
-    setConfirmPassword('LexisPass2024!');
-    setEmailError('');
-    setPasswordError('');
-    setConfirmPasswordError('');
-    setServerError('');
-  };
-
   const isFormInvalid = 
     !email || 
     !password || 
@@ -137,7 +127,7 @@ const AuthPage = () => {
         <div className="brand-panel-header">
           <div className="brand-lockup">
             <div className="brand-logo-frame">
-              <LexisLogo size={22} />
+              <LexisLogo size={30} />
             </div>
             <span className="brand-name">Lexis</span>
             <span className="brand-badge">Document Intelligence</span>
@@ -191,10 +181,12 @@ const AuthPage = () => {
               “Lexis has transformed how our research and legal teams analyze complex filings. Every single claim is grounded with instant citation verification down to the page.”
             </p>
             <footer className="quote-byline">
-              <div className="quote-avatar">SC</div>
+              <div className="quote-avatar quote-avatar-lexis">
+                <LexisLogo size={16} />
+              </div>
               <div className="quote-meta">
-                <span className="quote-name">Sofia Chen</span>
-                <span className="quote-role">Head of Research · Paradigm</span>
+                <span className="quote-name">Lexis</span>
+                <span className="quote-role">Document Intelligence Platform</span>
               </div>
             </footer>
           </blockquote>
@@ -349,17 +341,6 @@ const AuthPage = () => {
               )}
             </button>
           </form>
-
-          {/* Secondary / Demo Action */}
-          <div className="auth-secondary-actions">
-            <button
-              type="button"
-              className="auth-demo-action"
-              onClick={handleFillDemo}
-            >
-              Use demo credentials
-            </button>
-          </div>
 
           {/* Secondary Switch Link */}
           <div className="auth-bottom-switch">
