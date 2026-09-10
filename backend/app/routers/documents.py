@@ -16,6 +16,7 @@ from app.schemas.document import DocumentResponse, DocumentUpdate
 from app.config import settings
 from app.core.caching import invalidate_public_library
 from app.documents.summarizer import generate_document_summary
+from app.cache import cache
 
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
@@ -149,7 +150,9 @@ async def upload_document(
                 chat.title = derived_title
 
         await db.commit()
+        await cache.delete_pattern(f"user:{user_id}:chats:*")
         if chat:
+            await cache.delete(f"chat:{chat.id}:meta")
             background_tasks.add_task(
                 generate_document_summary,
                 chat.id,

@@ -452,6 +452,37 @@ const Dashboard = () => {
   const sidebarSessionListRef = useRef(null);
   const alertsDropdownRef = useRef(null);
   const textareaRef = useRef(null);
+  const uploadTimerRef = useRef(null);
+
+  const showUploadSuccess = (msg) => {
+    if (uploadTimerRef.current) clearTimeout(uploadTimerRef.current);
+    setUploadError('');
+    setUploadSuccess(msg);
+    uploadTimerRef.current = setTimeout(() => {
+      setUploadSuccess('');
+    }, 6000);
+  };
+
+  const showUploadError = (msg) => {
+    if (uploadTimerRef.current) clearTimeout(uploadTimerRef.current);
+    setUploadSuccess('');
+    setUploadError(msg);
+    uploadTimerRef.current = setTimeout(() => {
+      setUploadError('');
+    }, 8000);
+  };
+
+  const clearUploadStatus = () => {
+    if (uploadTimerRef.current) clearTimeout(uploadTimerRef.current);
+    setUploadError('');
+    setUploadSuccess('');
+  };
+
+  useEffect(() => {
+    return () => {
+      if (uploadTimerRef.current) clearTimeout(uploadTimerRef.current);
+    };
+  }, []);
 
   // Auto-expand query textarea on input / newline
   useEffect(() => {
@@ -731,15 +762,26 @@ const Dashboard = () => {
     if (chat.isOptimistic) return;
 
     try {
-      const res = await apiClient.get(`/chats/${chat.id}/messages`);
-      setMessages(res.data);
-      
-      const allCitations = res.data
-        .filter(m => m.role === 'assistant' && m.citations)
-        .flatMap(m => m.citations);
-      setCitations(allCitations);
+      const [messagesRes, chatMetaRes] = await Promise.allSettled([
+        apiClient.get(`/chats/${chat.id}/messages`),
+        apiClient.get(`/chats/${chat.id}`)
+      ]);
+
+      if (messagesRes.status === 'fulfilled') {
+        setMessages(messagesRes.value.data);
+        const allCitations = messagesRes.value.data
+          .filter(m => m.role === 'assistant' && m.citations)
+          .flatMap(m => m.citations);
+        setCitations(allCitations);
+      }
+
+      if (chatMetaRes.status === 'fulfilled' && chatMetaRes.value?.data) {
+        const fullChat = chatMetaRes.value.data;
+        setActiveChat(prev => (prev?.id === chat.id ? { ...prev, ...fullChat } : prev));
+        setChats(prev => prev.map(c => c.id === chat.id ? { ...c, ...fullChat } : c));
+      }
     } catch (err) {
-      console.error('Error fetching message history:', err);
+      console.error('Error fetching chat session details:', err);
     }
   };
 
@@ -876,8 +918,7 @@ const Dashboard = () => {
     if (!file) return;
 
     setIsUploading(true);
-    setUploadError('');
-    setUploadSuccess('');
+    clearUploadStatus();
 
     let targetChat;
 
@@ -888,11 +929,10 @@ const Dashboard = () => {
         const newChat = createRes.data;
         setChats(prev => [newChat, ...prev]);
         setActiveChat(newChat);
-        selectChat(newChat);
         targetChat = newChat;
       } catch (chatErr) {
         console.error('Failed to auto-create chat session:', chatErr);
-        setUploadError(chatErr.response?.data?.detail?.error?.message || 'Could not create a chat session for upload.');
+        showUploadError(chatErr.response?.data?.detail?.error?.message || 'Could not create a chat session for upload.');
         setIsUploading(false);
         return;
       }
@@ -910,24 +950,40 @@ const Dashboard = () => {
           'Content-Type': 'multipart/form-data'
         }
       });
-      setUploadError('');
-      setUploadSuccess(`Indexed successfully: ${res.data.filename}`);
       
-      // Update active chat to reflect linked document — use doc filename as session name
-      const updatedChatRes = await apiClient.get(`/chats/${targetChat.id}`);
+      showUploadSuccess(`Indexed successfully: ${res.data.filename}`);
+
+      // 1. Immediately activate document workspace with document info from upload response
       const updatedChat = {
-        ...updatedChatRes.data,
-        display_name: updatedChatRes.data.display_name || res.data.filename || updatedChatRes.data.title
+        ...targetChat,
+        current_doc_id: res.data.id,
+        display_name: res.data.filename || targetChat.display_name,
+        title: targetChat.title === 'New Chat' ? res.data.filename : targetChat.title,
+        summary_status: 'generating'
       };
       setChats(prevChats => prevChats.map(c => c.id === targetChat.id ? updatedChat : c));
       setActiveChat(updatedChat);
-      
-      // Fetch fresh notifications in case there's warning update
-      fetchNotifications();
+
+      // 2. Non-blocking secondary sync for background notifications & server meta
+      try {
+        const updatedChatRes = await apiClient.get(`/chats/${targetChat.id}`);
+        if (updatedChatRes.data) {
+          const syncedChat = {
+            ...updatedChatRes.data,
+            current_doc_id: updatedChatRes.data.current_doc_id || res.data.id,
+            display_name: updatedChatRes.data.display_name || res.data.filename || updatedChatRes.data.title
+          };
+          setChats(prevChats => prevChats.map(c => c.id === targetChat.id ? syncedChat : c));
+          setActiveChat(prev => (prev?.id === targetChat.id ? { ...prev, ...syncedChat } : prev));
+        }
+        fetchNotifications();
+      } catch (syncErr) {
+        console.warn('Non-fatal: could not sync latest chat metadata after upload:', syncErr);
+      }
     } catch (err) {
       console.error('Upload failed:', err);
       const detail = err.response?.data?.detail;
-      setUploadError(typeof detail === 'string' ? detail : detail?.error?.message || 'File validation or indexing failed.');
+      showUploadError(typeof detail === 'string' ? detail : detail?.error?.message || 'File validation or indexing failed.');
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) {
@@ -947,8 +1003,7 @@ const Dashboard = () => {
   const handleNewSessionUpload = async (file) => {
     if (!file) return;
     setIsUploading(true);
-    setUploadError('');
-    setUploadSuccess('');
+    clearUploadStatus();
 
     let newChat;
     try {
@@ -956,9 +1011,8 @@ const Dashboard = () => {
       newChat = createRes.data;
       setChats(prev => [newChat, ...prev]);
       setActiveChat(newChat);
-      selectChat(newChat);
     } catch (chatErr) {
-      setUploadError(chatErr.response?.data?.detail?.error?.message || 'Could not create session.');
+      showUploadError(chatErr.response?.data?.detail?.error?.message || 'Could not create session.');
       setIsUploading(false);
       return;
     }
@@ -972,20 +1026,39 @@ const Dashboard = () => {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
-      const updatedChatRes = await apiClient.get(`/chats/${newChat.id}`);
+      showUploadSuccess(`Indexed successfully: ${res.data.filename}`);
+      setShowNewSessionModal(false);
+
+      // 1. Immediately activate document workspace with document info from upload response
       const updatedChat = {
-        ...updatedChatRes.data,
-        display_name: updatedChatRes.data.display_name || res.data.filename || updatedChatRes.data.title
+        ...newChat,
+        current_doc_id: res.data.id,
+        display_name: res.data.filename || newChat.display_name,
+        title: newChat.title === 'New Session' ? res.data.filename : newChat.title,
+        summary_status: 'generating'
       };
       setChats(prev => prev.map(c => c.id === newChat.id ? updatedChat : c));
       setActiveChat(updatedChat);
-      setUploadError('');
-      setUploadSuccess(`${res.data.filename}`);
-      setShowNewSessionModal(false);
-      fetchNotifications();
+
+      // 2. Non-blocking secondary sync
+      try {
+        const updatedChatRes = await apiClient.get(`/chats/${newChat.id}`);
+        if (updatedChatRes.data) {
+          const syncedChat = {
+            ...updatedChatRes.data,
+            current_doc_id: updatedChatRes.data.current_doc_id || res.data.id,
+            display_name: updatedChatRes.data.display_name || res.data.filename || updatedChatRes.data.title
+          };
+          setChats(prev => prev.map(c => c.id === newChat.id ? syncedChat : c));
+          setActiveChat(prev => (prev?.id === newChat.id ? { ...prev, ...syncedChat } : prev));
+        }
+        fetchNotifications();
+      } catch (syncErr) {
+        console.warn('Non-fatal: could not sync latest chat metadata after upload:', syncErr);
+      }
     } catch (err) {
       const detail = err.response?.data?.detail;
-      setUploadError(typeof detail === 'string' ? detail : detail?.error?.message || 'Indexing failed.');
+      showUploadError(typeof detail === 'string' ? detail : detail?.error?.message || 'Indexing failed.');
     } finally {
       setIsUploading(false);
       if (newSessionFileInputRef.current) newSessionFileInputRef.current.value = '';
@@ -1602,16 +1675,38 @@ const Dashboard = () => {
           )}
 
           {uploadError && (
-            <div style={{ padding: '12px 24px', backgroundColor: 'rgba(239,68,68,0.08)', color: 'var(--color-error)', borderBottom: '1px solid rgba(239,68,68,0.25)', fontWeight: '600', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <AlertTriangle className="icon" />
-              <span>Upload failed: {uploadError}</span>
+            <div style={{ padding: '10px 24px', backgroundColor: 'rgba(239,68,68,0.08)', color: 'var(--color-error)', borderBottom: '1px solid rgba(239,68,68,0.25)', fontWeight: '500', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertTriangle className="icon-small" />
+                <span>Upload failed: {uploadError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setUploadError('')}
+                style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', padding: '2px 6px', fontSize: '14px', lineHeight: 1, opacity: 0.7, borderRadius: '4px' }}
+                title="Dismiss"
+                aria-label="Dismiss upload error"
+              >
+                ✕
+              </button>
             </div>
           )}
 
           {uploadSuccess && (
-            <div style={{ padding: '12px 24px', backgroundColor: 'rgba(16,185,129,0.08)', color: 'var(--color-accent-green)', borderBottom: '1px solid rgba(16,185,129,0.25)', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <CheckCircle className="icon" />
-              <span>Document indexed: {uploadSuccess}</span>
+            <div style={{ padding: '10px 24px', backgroundColor: 'rgba(16,185,129,0.08)', color: 'var(--color-accent-green)', borderBottom: '1px solid rgba(16,185,129,0.25)', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <CheckCircle className="icon-small" />
+                <span>Document indexed: {uploadSuccess}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setUploadSuccess('')}
+                style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', padding: '2px 6px', fontSize: '14px', lineHeight: 1, opacity: 0.7, borderRadius: '4px' }}
+                title="Dismiss"
+                aria-label="Dismiss upload success"
+              >
+                ✕
+              </button>
             </div>
           )}
 

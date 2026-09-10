@@ -10,6 +10,7 @@ from app.models.chat import Chat
 from app.models.document import Document
 from app.config import settings
 from app.sse import sse_manager
+from app.cache import cache
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +185,8 @@ async def generate_document_summary(
             chat.summary_status = "failed"
 
         await db.commit()
+        await cache.delete_pattern(f"user:{chat.user_id}:chats:*")
+        await cache.delete(f"chat:{chat_id}:meta")
 
         # Emit completion/failure SSE event
         await sse_manager.emit(chat_id, {
