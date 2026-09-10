@@ -887,11 +887,11 @@ html, body, #root {
 }
 
 .central-hub-logo {
-  margin-bottom: 12px;
+  margin-bottom: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  filter: drop-shadow(0 4px 16px rgba(255, 122, 23, 0.25));
+  filter: drop-shadow(0 4px 18px rgba(255, 122, 23, 0.28));
 }
 
 .central-hub-title {

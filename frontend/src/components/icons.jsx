@@ -36,6 +36,7 @@ export const PanelLeft = createIcon(
 
 export const LexisLogo = ({ className, size = 16, animated = false, style, ...props }) => {
   const isMicro = Number(size) <= 18;
+  const dimension = typeof size === 'number' ? `${size}px` : size;
 
   return (
     <svg 
@@ -45,7 +46,16 @@ export const LexisLogo = ({ className, size = 16, animated = false, style, ...pr
       xmlns="http://www.w3.org/2000/svg" 
       aria-hidden="true"
       className={`${className || "icon"} ${animated ? 'animate-pulse' : ''}`.trim()}
-      style={{ display: 'inline-block', verticalAlign: 'middle', overflow: 'visible', ...style }}
+      style={{ 
+        width: dimension, 
+        height: dimension, 
+        minWidth: dimension, 
+        minHeight: dimension, 
+        display: 'inline-block', 
+        verticalAlign: 'middle', 
+        overflow: 'visible', 
+        ...style 
+      }}
       {...props}
     >
       <defs>

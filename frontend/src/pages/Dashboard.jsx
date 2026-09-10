@@ -1620,7 +1620,7 @@ const Dashboard = () => {
             <div className="central-research-hub">
               <div className="central-hub-brand">
                 <div className="central-hub-logo">
-                  <LexisLogo size={36} />
+                  <LexisLogo size={48} />
                 </div>
                 <h1 className="central-hub-title">Where would you like to begin?</h1>
                 <p className="central-hub-subtitle">
