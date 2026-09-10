@@ -102,7 +102,7 @@ const AuthPage = () => {
       const detail = err.response?.data?.detail;
       const message = typeof detail === 'string' 
         ? detail 
-        : detail?.error?.message || 'Authentication failed. Please verify your credentials.';
+        : detail?.error?.message || 'Authentication failed. Please check your credentials.';
       setServerError(message);
     } finally {
       setIsSubmitting(false);
@@ -128,33 +128,88 @@ const AuthPage = () => {
     isSubmitting;
 
   return (
-    <div className="shadcn-auth-container">
-      {/* Left Panel: shadcn-style brand & editorial quote */}
-      <div className="shadcn-auth-sidebar">
-        <div className="shadcn-sidebar-header">
-          <LexisLogo size={22} />
-          <span className="shadcn-sidebar-brand">Lexis</span>
+    <div className="lexis-auth-screen">
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* LEFT / BRAND PANEL (~50% width)                               */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      <div className="auth-brand-panel">
+        {/* Top Brand Lockup */}
+        <div className="brand-panel-header">
+          <div className="brand-lockup">
+            <div className="brand-logo-frame">
+              <LexisLogo size={22} />
+            </div>
+            <span className="brand-name">Lexis</span>
+            <span className="brand-badge">Document Intelligence</span>
+          </div>
         </div>
 
-        <div className="shadcn-sidebar-quote">
-          <blockquote>
-            <p className="quote-body">
+        {/* Brand Statement & Core Principles */}
+        <div className="brand-panel-main">
+          <div className="brand-statement-group">
+            <h1 className="brand-headline">
+              Understand documents.<br />
+              Verify every claim.
+            </h1>
+            <p className="brand-supporting">
+              AI-powered document intelligence for research, analysis, and evidence-backed answers.
+            </p>
+          </div>
+
+          {/* Three Compact Principles (01, 02, 03) */}
+          <div className="brand-principles">
+            <div className="principle-item">
+              <span className="principle-number">01</span>
+              <div className="principle-content">
+                <h2 className="principle-title">Grounded answers</h2>
+                <p className="principle-desc">Retrieve answers directly from your source material.</p>
+              </div>
+            </div>
+
+            <div className="principle-item">
+              <span className="principle-number">02</span>
+              <div className="principle-content">
+                <h2 className="principle-title">Verifiable citations</h2>
+                <p className="principle-desc">Trace claims back to the exact supporting passage.</p>
+              </div>
+            </div>
+
+            <div className="principle-item">
+              <span className="principle-number">03</span>
+              <div className="principle-content">
+                <h2 className="principle-title">Research at scale</h2>
+                <p className="principle-desc">Analyze complex document collections without losing context.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom Credibility Statement */}
+        <div className="brand-panel-footer">
+          <blockquote className="brand-quote">
+            <p className="quote-text">
               “Lexis has transformed how our research and legal teams analyze complex filings. Every single claim is grounded with instant citation verification down to the page.”
             </p>
-            <footer className="quote-author">
-              Sofia Chen, Head of Research
+            <footer className="quote-byline">
+              <div className="quote-avatar">SC</div>
+              <div className="quote-meta">
+                <span className="quote-name">Sofia Chen</span>
+                <span className="quote-role">Head of Research · Paradigm</span>
+              </div>
             </footer>
           </blockquote>
         </div>
       </div>
 
-      {/* Right Panel: Clean shadcn authentication form */}
-      <div className="shadcn-auth-main">
-        {/* Top-Right Toggle Link */}
-        <div className="shadcn-top-nav">
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* RIGHT / AUTH PANEL (~50% width)                                */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      <div className="auth-form-panel">
+        {/* Top-Right Alternate Auth Action */}
+        <div className="auth-panel-top">
           <button
             type="button"
-            className="shadcn-ghost-btn"
+            className="auth-switch-link"
             onClick={() => {
               setIsLogin(!isLogin);
               setServerError('');
@@ -163,26 +218,39 @@ const AuthPage = () => {
               setConfirmPasswordError('');
             }}
           >
-            {isLogin ? 'Register' : 'Sign in'}
+            {isLogin ? (
+              <>
+                <span className="switch-prompt">Don't have an account?</span>
+                <span className="switch-action">Sign up</span>
+              </>
+            ) : (
+              <>
+                <span className="switch-prompt">Already have an account?</span>
+                <span className="switch-action">Sign in</span>
+              </>
+            )}
           </button>
         </div>
 
-        {/* Centered Form Wrapper */}
-        <div className="shadcn-form-box">
-          <div className="shadcn-form-header">
-            <h1 className="shadcn-form-title">
-              {isLogin ? 'Welcome back' : 'Create an account'}
-            </h1>
-            <p className="shadcn-form-desc">
+        {/* Centered Auth Content Wrapper */}
+        <div className="auth-form-wrapper">
+          <div className="auth-form-header">
+            <span className="auth-eyebrow">
+              {isLogin ? 'WELCOME BACK' : 'GET STARTED'}
+            </span>
+            <h2 className="auth-heading">
+              {isLogin ? 'Sign in to Lexis' : 'Create your Lexis account'}
+            </h2>
+            <p className="auth-subheading">
               {isLogin
-                ? 'Enter your email and password to sign in'
-                : 'Enter your details below to create your account'}
+                ? 'Continue your research and document analysis.'
+                : 'Start researching, analyzing, and understanding your documents.'}
             </p>
           </div>
 
           {/* Info Banner */}
           {location.state?.message && !serverError && (
-            <div className="shadcn-alert-success" role="status">
+            <div className="auth-banner-info" role="status">
               <CheckCircle className="icon-sm" style={{ color: '#10b981', flexShrink: 0 }} />
               <span>{location.state.message}</span>
             </div>
@@ -190,40 +258,40 @@ const AuthPage = () => {
 
           {/* Server Error Alert */}
           {serverError && (
-            <div className="shadcn-alert-error" role="alert">
+            <div className="auth-banner-error" role="alert">
               <span>{serverError}</span>
             </div>
           )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} noValidate className="shadcn-form">
-            <div className="shadcn-form-item">
-              <label htmlFor="email" className="shadcn-label">
+          <form onSubmit={handleSubmit} noValidate className="auth-form-element">
+            <div className="form-group">
+              <label htmlFor="email" className="form-label">
                 Email
               </label>
               <input
                 id="email"
                 type="email"
-                placeholder="name@example.com"
+                placeholder="name@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className={`shadcn-input ${emailError ? 'shadcn-input-error' : ''}`}
+                className={`form-input ${emailError ? 'input-invalid' : ''}`}
                 autoComplete="email"
                 required
               />
               {emailError && (
-                <span className="shadcn-error-text">{emailError}</span>
+                <span className="form-error-msg">{emailError}</span>
               )}
             </div>
 
-            <div className="shadcn-form-item">
-              <div className="shadcn-label-row">
-                <label htmlFor="password" className="shadcn-label">
+            <div className="form-group">
+              <div className="label-with-action">
+                <label htmlFor="password" className="form-label">
                   Password
                 </label>
                 <button
                   type="button"
-                  className="shadcn-toggle-pwd"
+                  className="toggle-password-btn"
                   onClick={() => setShowPassword(!showPassword)}
                   tabIndex={-1}
                 >
@@ -236,19 +304,19 @@ const AuthPage = () => {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className={`shadcn-input ${passwordError ? 'shadcn-input-error' : ''}`}
+                className={`form-input ${passwordError ? 'input-invalid' : ''}`}
                 autoComplete={isLogin ? 'current-password' : 'new-password'}
                 required
               />
               {passwordError && (
-                <span className="shadcn-error-text">{passwordError}</span>
+                <span className="form-error-msg">{passwordError}</span>
               )}
             </div>
 
             {!isLogin && (
-              <div className="shadcn-form-item">
-                <label htmlFor="confirmPassword" className="shadcn-label">
-                  Confirm Password
+              <div className="form-group">
+                <label htmlFor="confirmPassword" className="form-label">
+                  Confirm password
                 </label>
                 <input
                   id="confirmPassword"
@@ -256,47 +324,65 @@ const AuthPage = () => {
                   placeholder="••••••••"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className={`shadcn-input ${confirmPasswordError ? 'shadcn-input-error' : ''}`}
+                  className={`form-input ${confirmPasswordError ? 'input-invalid' : ''}`}
                   autoComplete="new-password"
                   required
                 />
                 {confirmPasswordError && (
-                  <span className="shadcn-error-text">{confirmPasswordError}</span>
+                  <span className="form-error-msg">{confirmPasswordError}</span>
                 )}
               </div>
             )}
 
+            {/* Primary Submit CTA */}
             <button
               type="submit"
-              className="shadcn-btn-primary"
+              className="auth-primary-btn"
               disabled={isFormInvalid}
             >
               {isSubmitting ? (
-                <span>Signing in...</span>
+                <span className="btn-spinner-text">Authenticating...</span>
               ) : isLogin ? (
-                'Sign In with Email'
+                'Sign in'
               ) : (
-                'Create Account'
+                'Create account'
               )}
             </button>
           </form>
 
-          {/* Quick Demo Fill Helper */}
-          <div className="shadcn-demo-row">
+          {/* Secondary / Demo Action */}
+          <div className="auth-secondary-actions">
             <button
               type="button"
-              className="shadcn-btn-demo"
+              className="auth-demo-action"
               onClick={handleFillDemo}
             >
-              Fill demo credentials
+              Use demo credentials
             </button>
           </div>
 
-          {/* Footer Terms */}
-          <p className="shadcn-terms">
-            By clicking continue, you agree to our{' '}
-            <span className="shadcn-link">Terms of Service</span> and{' '}
-            <span className="shadcn-link">Privacy Policy</span>.
+          {/* Secondary Switch Link */}
+          <div className="auth-bottom-switch">
+            <button
+              type="button"
+              className="auth-inline-toggle"
+              onClick={() => {
+                setIsLogin(!isLogin);
+                setServerError('');
+                setEmailError('');
+                setPasswordError('');
+                setConfirmPasswordError('');
+              }}
+            >
+              {isLogin ? "Don't have an account? Create one" : 'Already have an account? Sign in'}
+            </button>
+          </div>
+
+          {/* Legal Copy */}
+          <p className="auth-legal-copy">
+            By continuing, you agree to the{' '}
+            <span className="legal-link">Terms of Service</span> and{' '}
+            <span className="legal-link">Privacy Policy</span>.
           </p>
         </div>
       </div>
