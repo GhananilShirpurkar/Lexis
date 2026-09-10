@@ -7,7 +7,7 @@ import apiClient from '../api/client';
 import { 
   Terminal, Plus, MessageSquare, Paperclip, ArrowRight, Upload, X, Pencil,
   FileText, AlertTriangle, Trash2, CheckCircle, ChevronLeft, ChevronRight,
-  Globe, ExternalLink, FolderPlus, Folder, ChevronDown, Sparkles
+  Globe, ExternalLink, FolderPlus, Folder, ChevronDown, Sparkles, LexisLogo
 } from '../components/icons';
 
 import ProfileDropdown from '../components/ProfileDropdown';
@@ -263,6 +263,98 @@ const DocumentOverview = ({ activeChat, onRegenerate }) => {
   );
 };
 
+const SAMPLE_CORPORA = [
+  {
+    id: 'infra_spec',
+    category: 'System Architecture',
+    filename: '2025_distributed_consensus_spec.txt',
+    title: 'Distributed Consensus & Replication Spec',
+    question: 'What are the primary failure recovery guarantees and latency targets across secondary cluster regions?',
+    content: `LEXIS SYSTEMS ARCHITECTURE SPECIFICATION v4.2
+Document: Distributed Consensus & Multi-Region State Machine Replication
+Author: Core Infrastructure Group
+Classification: Technical Architecture
+
+1. EXECUTIVE SUMMARY & OVERVIEW
+This specification defines the multi-region consensus protocol, raft state replication topology, and cross-zone disaster recovery invariants for the Lexis distributed indexing cluster. The cluster operates across three primary cloud regions (us-east-1, us-west-2, eu-west-1) maintaining serialized snapshot guarantees under network partition scenarios.
+
+2. CONSENSUS & REPLICATION TOPOLOGY
+The cluster utilizes an optimized Raft implementation augmented with pipelined leader heartbeats and pre-vote candidate verification. Quorum requires a majority of (N/2 + 1) active replicas across distinct availability zones.
+- Write Latency Target: p95 < 14ms for single-region consensus commits; p99 < 32ms under cross-region quorum mode.
+- Read Consistency: Strongly consistent reads execute via leader leases with read-index verification. Monotonic sequence counters prevent stale cache ingestion.
+
+3. FAILURE RECOVERY & FAILOVER GUARANTEES
+In the event of sudden primary node failure or regional network partition:
+- Election Timeout: Randomized election window is set strictly between 150ms and 300ms to avoid split-vote oscillations.
+- Failover Convergence: Secondary region failover completes in < 450ms. State recovery guarantees zero data loss (RPO = 0) for all acknowledged write transactions prior to the partition.
+- Split-Brain Mitigation: Strict majority fencing ensures partitioned minority partitions transition to read-only follower states within 200ms of heartbeat loss.
+- Disaster Recovery RTO: In catastrophic multi-datacenter degradation, regional cold standby clusters rehydrate snapshot states within 120 seconds.
+
+4. TENANT ISOLATION & STORAGE ENCRYPTION
+Every document corpus and vector chunk partition is stored in cryptographically isolated tenant namespaces. Data at rest is encrypted using customer-managed envelope keys rotated every 90 days.`
+  },
+  {
+    id: 'enterprise_msa',
+    category: 'Legal & Compliance',
+    filename: 'enterprise_master_services_agreement.txt',
+    title: 'Enterprise Master Services Agreement',
+    question: 'What indemnification caps and liability exceptions are defined for data security incidents?',
+    content: `MASTER SERVICES AGREEMENT (STANDARD ENTERPRISE TERMS)
+Effective Date: March 1, 2025
+Parties: Lexis Intelligence Technologies, Inc. ("Provider") and Customer ("Client")
+
+SECTION 8: CONFIDENTIALITY AND DATA PROTECTION
+8.1 Confidential Information. Each party acknowledges that during the term of this Agreement, it may have access to proprietary technical, operational, and commercial data. Each party agrees to hold all such information in strict confidence.
+8.2 Security Controls and Incident Response. Provider shall maintain administrative, physical, and technical safeguards designed to protect the security and confidentiality of Client Data. In the event of a verified Security Incident involving unauthorized exposure of Client Personal Data, Provider shall notify Client within twenty-four (24) hours of confirmation.
+
+SECTION 11: LIMITATION OF LIABILITY
+11.1 General Cap. Except as provided in Section 11.2, neither party's aggregate liability arising out of or related to this Agreement shall exceed the total fees paid or payable by Client in the twelve (12) months preceding the incident giving rise to liability.
+11.2 Supercap for Data Security Incidents. In the case of a direct Security Incident resulting from gross negligence or willful misconduct of Provider that compromises Client Data, the aggregate liability cap shall be expanded to three times (3x) the fees paid by Client in the preceding twelve (12) months ("Supercap").
+11.3 Exclusions. In no event shall either party be liable for any indirect, incidental, punitive, or consequential damages, including loss of business profits or goodwill, regardless of whether advised of the possibility of such damages.
+
+SECTION 14: GOVERNING LAW AND JURISDICTION
+This Agreement shall be governed by and construed in accordance with the laws of the State of Delaware, without giving effect to conflict of laws principles.`
+  }
+];
+
+const groupChatsByPeriod = (chatList) => {
+  const groups = {
+    today: [],
+    yesterday: [],
+    previous7Days: [],
+    older: []
+  };
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfYesterday = startOfToday - 86400000;
+  const startOf7Days = startOfToday - 7 * 86400000;
+
+  chatList.forEach(chat => {
+    if (!chat.created_at) {
+      groups.today.push(chat);
+      return;
+    }
+    const t = new Date(chat.created_at).getTime();
+    if (t >= startOfToday) {
+      groups.today.push(chat);
+    } else if (t >= startOfYesterday) {
+      groups.yesterday.push(chat);
+    } else if (t >= startOf7Days) {
+      groups.previous7Days.push(chat);
+    } else {
+      groups.older.push(chat);
+    }
+  });
+
+  return [
+    { title: 'Today', items: groups.today },
+    { title: 'Yesterday', items: groups.yesterday },
+    { title: 'Previous 7 Days', items: groups.previous7Days },
+    { title: 'Older', items: groups.older }
+  ].filter(g => g.items.length > 0);
+};
+
 const Dashboard = () => {
   const { user, token } = useAuth();
   const { toast } = useToast();
@@ -300,6 +392,7 @@ const Dashboard = () => {
   // New session upload modal state
   const [showNewSessionModal, setShowNewSessionModal] = useState(false);
   const [newSessionDragging, setNewSessionDragging] = useState(false);
+  const [isHeroDragging, setIsHeroDragging] = useState(false);
 
   // Sidebar inline rename state
   const [renamingChatId, setRenamingChatId] = useState(null);
@@ -865,6 +958,68 @@ const Dashboard = () => {
     }
   };
 
+  const handleHeroDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsHeroDragging(true);
+  };
+
+  const handleHeroDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsHeroDragging(false);
+  };
+
+  const handleHeroDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsHeroDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      processFileUpload(file);
+    }
+  };
+
+  const handleLoadSample = async (sample) => {
+    if (isUploading) return;
+    try {
+      const file = new File([sample.content], sample.filename, { type: 'text/plain' });
+      await processFileUpload(file);
+      setQueryText(sample.question);
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          textareaRef.current.style.height = 'auto';
+          textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 160) + 'px';
+        }
+      }, 150);
+    } catch (err) {
+      console.error('Failed to load sample document:', err);
+      toast?.error?.('Could not load sample document');
+    }
+  };
+
+  const handleUseSamplePrompt = async (question) => {
+    if (!activeChat) {
+      try {
+        const createRes = await apiClient.post('/chats', { title: 'Research Session' });
+        const newChat = createRes.data;
+        setChats(prev => [newChat, ...prev]);
+        setActiveChat(newChat);
+      } catch (err) {
+        console.error('Failed to create session:', err);
+      }
+    }
+    setQueryText(question);
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.style.height = 'auto';
+        textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 160) + 'px';
+      }
+    }, 50);
+  };
+
   const handleDragOver = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -881,16 +1036,33 @@ const Dashboard = () => {
 
   const handleSendQuery = async (e) => {
     e?.preventDefault();
-    if (!queryText.trim() || !activeChat || isGenerating) return;
+    if (!queryText.trim() || isGenerating) return;
+
+    let targetChat = activeChat;
+    if (!targetChat) {
+      try {
+        const createRes = await apiClient.post('/chats', { title: queryText.trim().slice(0, 32) || 'New Session' });
+        targetChat = createRes.data;
+        setChats(prev => [targetChat, ...prev]);
+        setActiveChat(targetChat);
+      } catch (chatErr) {
+        console.error('Failed to auto-create session for query:', chatErr);
+        toast?.error?.('Could not initialize session.');
+        return;
+      }
+    }
 
     const userMessageText = queryText;
     setQueryText('');
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
     setMessages(prev => [...prev, { role: 'user', content: userMessageText, created_at: new Date() }]);
     setIsGenerating(true);
     setStreamedResponse('');
 
     try {
-      const response = await fetch(`/api/chats/${activeChat.id}/messages`, {
+      const response = await fetch(`/api/chats/${targetChat.id}/messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -929,40 +1101,30 @@ const Dashboard = () => {
               if (data.type === 'token') {
                 tempAnswer += data.content;
                 setStreamedResponse(tempAnswer);
-              } else if (data.type === 'web_search_status') {
-                setWebSearchCount(data.count || 0);
-                if (data.warning) {
-                  systemWarningText = data.warning;
-                }
+              } else if (data.type === 'sources') {
+                pendingWebSources = data.sources || [];
+              } else if (data.type === 'warning') {
+                systemWarningText = data.message;
               } else if (data.type === 'done') {
-                const finalCitations = data.citations || [];
-                pendingWebSources = data.web_sources || [];
-                const msgId = data.message_id;
-                if (data.system_warning) {
-                  systemWarningText = data.system_warning;
-                }
-                
-                // Immediately commit to local UI state
-                const newMsgIndex = messages.length + 1;
-                setMessages(prev => [
-                  ...prev,
-                  { 
-                    role: 'assistant', 
-                    content: tempAnswer, 
-                    citations: finalCitations, 
-                    created_at: new Date(),
-                    had_web_search: webSearchEnabled,
-                    web_source_count: pendingWebSources.length,
-                    system_warning: systemWarningText
-                  }
-                ]);
+                // Final answer arrived
+                const finalAssistantMessage = {
+                  role: 'assistant',
+                  content: data.full_response || tempAnswer,
+                  citations: data.citations || [],
+                  created_at: new Date(),
+                  web_sources: pendingWebSources,
+                  system_warning: systemWarningText
+                };
 
-                // Store web sources keyed by message index and message_id
-                if (pendingWebSources.length > 0) {
+                setMessages(prev => [...prev, finalAssistantMessage]);
+
+                if (pendingWebSources && pendingWebSources.length > 0) {
                   setWebSourcesMap(prev => {
-                    const newMap = { ...prev, [newMsgIndex]: pendingWebSources };
-                    if (msgId) {
-                      newMap[msgId] = pendingWebSources;
+                    const newMap = { ...prev };
+                    const msgId = data.message_id || `msg_${Date.now()}`;
+                    newMap[msgId] = pendingWebSources;
+                    if (data.full_response) {
+                      newMap[data.full_response.slice(0, 40)] = pendingWebSources;
                     }
                     return newMap;
                   });
@@ -974,7 +1136,7 @@ const Dashboard = () => {
 
                 // Background sync with database
                 try {
-                  const res = await apiClient.get(`/chats/${activeChat.id}/messages`);
+                  const res = await apiClient.get(`/chats/${targetChat.id}/messages`);
                   if (res.data && res.data.length > 0) {
                     setMessages(res.data);
                     const allCitations = res.data
@@ -1050,30 +1212,33 @@ const Dashboard = () => {
 
         <aside className={`sidebar-panel ${sidebarOpen ? 'open-mobile' : 'collapsed'}`}>
           <div className="sidebar-section-header">
-            <span>{sidebarOpen && "SESSION HISTORY"}</span>
+            <span>{sidebarOpen && "Sessions"}</span>
             <button className="btn-ghost" onClick={() => setSidebarOpen(!sidebarOpen)} title="Toggle Rail">
               {sidebarOpen ? <ChevronLeft className="icon" /> : <ChevronRight className="icon" />}
             </button>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xs)', marginBottom: 'var(--space-md)' }}>
+          <div className="sidebar-actions-row">
             <button 
-              className="sidebar-new-session-btn outline-btn" 
-              style={{ backgroundColor: 'transparent', color: 'var(--color-ink)', border: '1px solid var(--color-hairline-translucent)' }}
+              ref={newChatBtnRef} 
+              className="sidebar-action-btn primary" 
+              onClick={handleCreateChat} 
+              title="New Session"
+            >
+              <Plus className="icon-small" />
+              {sidebarOpen && <span>New Session</span>}
+            </button>
+            <button 
+              className="sidebar-action-btn secondary" 
               onClick={() => {
                 setWorkspaceName('');
                 setSelectedChatIds([]);
                 setShowCreateWorkspaceModal(true);
               }}
               title="Create Workspace"
+              aria-label="Create Workspace"
             >
               <FolderPlus className="icon-small" />
-              {sidebarOpen && <span>NEW WORKSPACE</span>}
-            </button>
-
-            <button ref={newChatBtnRef} className="sidebar-new-session-btn" onClick={handleCreateChat} title="New Session">
-              <Plus className="icon-small" />
-              {sidebarOpen && <span>NEW SESSION</span>}
             </button>
           </div>
 
@@ -1084,65 +1249,70 @@ const Dashboard = () => {
               {chats.filter(c => !c.is_workspace_chat).length === 0 ? (
                 <div className="sidebar-empty">No sessions yet. Start with "+ New Session" above.</div>
               ) : (
-                chats.filter(c => !c.is_workspace_chat).map(chat => (
-                  <div
-                    key={chat.id}
-                    className={`sidebar-session-item ${activeChat?.id === chat.id ? 'active' : ''} ${chat.isOptimistic ? 'is-optimistic' : ''} sidebar-session-item-hoverable`}
-                    onClick={() => renamingChatId !== chat.id && selectChat(chat)}
-                  >
-                    {renamingChatId === chat.id ? (
-                      <form
-                        onSubmit={(e) => handleSidebarRename(chat, e)}
-                        style={{ flex: 1, display: 'flex', gap: '4px', alignItems: 'center' }}
-                        onClick={e => e.stopPropagation()}
-                      >
-                        <input
-                          autoFocus
-                          className="text-input"
-                          value={renamingValue}
-                          onChange={e => setRenamingValue(e.target.value)}
-                          maxLength={60}
-                          style={{ flex: 1, height: '26px', fontSize: '12px', padding: '2px 8px' }}
-                          onBlur={() => setRenamingChatId(null)}
-                          onKeyDown={e => e.key === 'Escape' && setRenamingChatId(null)}
-                        />
-                        <button type="submit" className="btn-ghost" style={{ color: 'var(--color-accent-green)', padding: '2px' }} title="Save">✓</button>
-                      </form>
-                    ) : (
-                      <>
-                        <MessageSquare className="icon-small" style={{ flexShrink: 0 }} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div className="session-item-name">{getChatTitle(chat)}</div>
-                          {chat.created_at && (
-                            <div style={{ fontSize: '10px', color: 'var(--color-body-mid)', marginTop: '1px' }}>
-                              {formatRelativeTime(chat.created_at)}
-                            </div>
+                groupChatsByPeriod(chats.filter(c => !c.is_workspace_chat)).map(group => (
+                  <div key={group.title} className="sidebar-group">
+                    <div className="sidebar-group-label">{group.title}</div>
+                    <div className="sidebar-group-items">
+                      {group.items.map(chat => (
+                        <div
+                          key={chat.id}
+                          className={`sidebar-session-item ${activeChat?.id === chat.id ? 'active' : ''} ${chat.isOptimistic ? 'is-optimistic' : ''} sidebar-session-item-hoverable`}
+                          onClick={() => renamingChatId !== chat.id && selectChat(chat)}
+                        >
+                          {renamingChatId === chat.id ? (
+                            <form
+                              onSubmit={(e) => handleSidebarRename(chat, e)}
+                              style={{ flex: 1, display: 'flex', gap: '4px', alignItems: 'center' }}
+                              onClick={e => e.stopPropagation()}
+                            >
+                              <input
+                                autoFocus
+                                className="text-input"
+                                value={renamingValue}
+                                onChange={e => setRenamingValue(e.target.value)}
+                                maxLength={60}
+                                style={{ flex: 1, height: '26px', fontSize: '12px', padding: '2px 8px' }}
+                                onBlur={() => setRenamingChatId(null)}
+                                onKeyDown={e => e.key === 'Escape' && setRenamingChatId(null)}
+                              />
+                              <button type="submit" className="btn-ghost" style={{ color: 'var(--color-accent-green)', padding: '2px' }} title="Save">✓</button>
+                            </form>
+                          ) : (
+                            <>
+                              <MessageSquare className="icon-small session-item-icon" />
+                              <div className="session-item-content">
+                                <div className="session-item-name">{getChatTitle(chat)}</div>
+                                {chat.created_at && (
+                                  <div className="session-item-time">
+                                    {formatRelativeTime(chat.created_at)}
+                                  </div>
+                                )}
+                              </div>
+                              {chat.isOptimistic ? (
+                                <span className="session-item-optimistic">creating...</span>
+                              ) : (
+                                <div className="sidebar-item-actions">
+                                  <button
+                                    className="sidebar-item-action-btn"
+                                    onClick={(e) => startSidebarRename(chat, e)}
+                                    title="Rename"
+                                  >
+                                    <Pencil className="icon-tiny" />
+                                  </button>
+                                  <button
+                                    className="sidebar-item-action-btn delete"
+                                    onClick={(e) => onRequestDeleteChat(chat, e)}
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="icon-tiny" />
+                                  </button>
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
-                        {chat.isOptimistic ? (
-                          <span style={{ fontSize: '10px', opacity: 0.6, fontStyle: 'italic', flexShrink: 0 }}>creating...</span>
-                        ) : (
-                          <div className="sidebar-item-actions">
-                            <button
-                              className="btn-ghost"
-                              onClick={(e) => startSidebarRename(chat, e)}
-                              title="Rename"
-                              style={{ padding: '2px', color: 'var(--color-body-mid)' }}
-                            >
-                              <Pencil className="icon-tiny" />
-                            </button>
-                            <button
-                              className="btn-ghost"
-                              onClick={(e) => onRequestDeleteChat(chat, e)}
-                              title="Delete"
-                              style={{ padding: '2px', color: 'var(--color-body-mid)' }}
-                            >
-                              <Trash2 className="icon-tiny" />
-                            </button>
-                          </div>
-                        )}
-                      </>
-                    )}
+                      ))}
+                    </div>
                   </div>
                 ))
               )}
@@ -1310,28 +1480,108 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* Empty State Hero - shown only if no messages and no document has been uploaded yet */}
+          {/* Empty State Hero - Research Intake & Sample Intelligence */}
           {!activeChat?.current_doc_id && messages.length === 0 && !streamedResponse && (
             <div className="empty-state-hero">
-              <h1 className="empty-state-wordmark">LEXIS</h1>
-              <p className="empty-state-tagline">
-                Upload a document to generate embeddings and retrieve cited answers in real time.
-              </p>
+              <div className="empty-state-badge">
+                <span className="empty-badge-dot" />
+                DOCUMENT INTELLIGENCE PLATFORM
+              </div>
 
+              <div className="empty-state-brand">
+                <div className="empty-state-logo-box">
+                  <LexisLogo size={32} />
+                </div>
+                <h1 className="empty-state-headline">Understand documents. Verify every claim.</h1>
+                <p className="empty-state-subheadline">
+                  Upload complex technical specifications, legal agreements, or financial filings to extract verified answers with passage-level citation provenance.
+                </p>
+              </div>
+
+              {/* Research Intake Card */}
               <div 
-                className="empty-state-upload-zone" 
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
+                className={`empty-state-intake-card ${isHeroDragging ? 'drag-over' : ''} ${isUploading ? 'is-uploading' : ''}`}
+                onClick={() => !isUploading && fileInputRef.current?.click()}
+                onDragOver={handleHeroDragOver}
+                onDragLeave={handleHeroDragLeave}
+                onDrop={handleHeroDrop}
               >
-                <div className="upload-zone-icon">
-                  <Upload className="icon-large" />
+                {isUploading ? (
+                  <div className="intake-uploading-state">
+                    <div className="spinner" />
+                    <div className="intake-upload-title">Processing & Indexing Document…</div>
+                    <div className="intake-upload-meta">Extracting passages, generating embeddings, and building vector index</div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="intake-upload-icon-box">
+                      <Upload className="icon" />
+                    </div>
+                    <div className="intake-upload-content">
+                      <div className="intake-upload-title">
+                        <span>Drop documents here, or </span>
+                        <span className="intake-browse-link">browse files</span>
+                      </div>
+                      <div className="intake-upload-meta">
+                        <span>PDF, DOCX, TXT, MD</span>
+                        <span className="intake-meta-dot">•</span>
+                        <span>Up to 25 MB</span>
+                        <span className="intake-meta-dot">•</span>
+                        <span>Isolated Tenant Storage</span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Pre-Indexed Sample Intelligence */}
+              <div className="empty-state-samples-section">
+                <div className="samples-section-header">
+                  <span className="samples-header-title">PRE-INDEXED SAMPLE INTELLIGENCE</span>
+                  <span className="samples-header-hint">Instant test without local files</span>
                 </div>
-                <div className="upload-zone-text">
-                  Drop PDF, DOCX, or TXT documents here, or <span style={{ color: 'var(--color-accent-sunset)' }}>browse files</span>
-                </div>
-                <div className="upload-zone-hint">
-                  Automatic chunking, vector embedding, and citation matching
+
+                <div className="samples-grid">
+                  {SAMPLE_CORPORA.map((sample) => (
+                    <div key={sample.id} className="sample-card">
+                      <div className="sample-card-header">
+                        <div className="sample-card-title-row">
+                          <FileText className="icon-small sample-file-icon" />
+                          <span className="sample-card-title">{sample.title}</span>
+                        </div>
+                        <span className="sample-category-tag">{sample.category}</span>
+                      </div>
+
+                      <p className="sample-question-text">
+                        "{sample.question}"
+                      </p>
+
+                      <div className="sample-card-actions">
+                        <button
+                          type="button"
+                          className="sample-action-btn primary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleLoadSample(sample);
+                          }}
+                          disabled={isUploading}
+                        >
+                          <Sparkles className="icon-tiny" />
+                          <span>Load & Query</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="sample-action-btn secondary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleUseSamplePrompt(sample.question);
+                          }}
+                        >
+                          <span>Use Prompt</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -1466,24 +1716,31 @@ const Dashboard = () => {
           )}
 
           <div className="chat-input-bar">
-            <form onSubmit={handleSendQuery} className="chat-input-wrapper">
-              <button
-                id="web-search-toggle"
-                type="button"
-                className={`web-search-toggle ${webSearchEnabled ? 'active' : ''}`}
-                onClick={() => setWebSearchEnabled(!webSearchEnabled)}
-                title="Enable web search to supplement your documents with real-time information"
-              >
-                <Globe className="icon-small" />
-                {webSearchEnabled && <span className="ws-toggle-label">WEB</span>}
-              </button>
+            <form onSubmit={handleSendQuery} className="chat-input-card">
+              {activeChat?.current_doc_id && (
+                <div className="chat-input-context-row">
+                  <div className="input-context-pill">
+                    <FileText className="icon-tiny" />
+                    <span className="input-context-name">{activeChat.display_name || activeChat.generated_title || 'Document Active'}</span>
+                  </div>
+                </div>
+              )}
+
               <textarea 
                 ref={textareaRef}
                 className="chat-textarea"
-                placeholder={activeChat ? (webSearchEnabled ? "Search the web and your documents..." : "Type your query or instruction...") : "Attach a document to begin querying..."}
+                placeholder={activeChat?.current_doc_id 
+                  ? "Ask questions about this document... (Enter to send, Shift+Enter for newline)" 
+                  : (webSearchEnabled 
+                      ? "Search web intelligence and primary sources... (Enter to send)" 
+                      : "Type a query, test a prompt, or drop a document to begin...")}
                 value={queryText}
-                onChange={(e) => setQueryText(e.target.value)}
-                disabled={!activeChat || isGenerating}
+                onChange={(e) => {
+                  setQueryText(e.target.value);
+                  e.target.style.height = 'auto';
+                  e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px';
+                }}
+                disabled={isGenerating}
                 rows={1}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
@@ -1492,13 +1749,44 @@ const Dashboard = () => {
                   }
                 }}
               />
-              <button 
-                type="submit" 
-                className="chat-submit-btn"
-                disabled={!queryText.trim() || isGenerating}
-              >
-                <ArrowRight className="icon" />
-              </button>
+
+              <div className="chat-input-toolbar">
+                <div className="chat-toolbar-left">
+                  <button
+                    id="web-search-toggle"
+                    type="button"
+                    className={`toolbar-toggle-btn ${webSearchEnabled ? 'active' : ''}`}
+                    onClick={() => setWebSearchEnabled(!webSearchEnabled)}
+                    title="Enable web search to augment document retrieval with live web sources"
+                  >
+                    <Globe className="icon-small" />
+                    <span>Web Search</span>
+                    {webSearchEnabled && <span className="toolbar-dot" />}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="toolbar-action-btn"
+                    onClick={() => fileInputRef.current?.click()}
+                    title="Attach document to active session"
+                  >
+                    <Paperclip className="icon-small" />
+                    <span className="toolbar-btn-text">Attach</span>
+                  </button>
+                </div>
+
+                <div className="chat-toolbar-right">
+                  <span className="input-shortcut-hint">⌘ ↵ Send</span>
+                  <button 
+                    type="submit" 
+                    className="chat-submit-btn"
+                    disabled={!queryText.trim() || isGenerating}
+                    title="Send query"
+                  >
+                    {isGenerating ? <div className="spinner-tiny" /> : <ArrowRight className="icon-small" />}
+                  </button>
+                </div>
+              </div>
             </form>
           </div>
         </main>
@@ -1630,6 +1918,35 @@ const Dashboard = () => {
                   <span>{uploadError}</span>
                 </div>
               )}
+
+              <div style={{ marginTop: '4px' }}>
+                <div style={{ fontSize: '11px', color: 'var(--color-body-mid)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.8px', fontFamily: 'var(--font-mono)' }}>
+                  Or start with sample intelligence:
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {SAMPLE_CORPORA.map(sample => (
+                    <button
+                      key={sample.id}
+                      type="button"
+                      className="sample-modal-btn"
+                      onClick={() => {
+                        const file = new File([sample.content], sample.filename, { type: 'text/plain' });
+                        handleNewSessionUpload(file);
+                      }}
+                      disabled={isUploading}
+                    >
+                      <FileText className="icon-tiny" />
+                      <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {sample.title}
+                        </div>
+                        <div style={{ fontSize: '10px', color: 'var(--color-body-mid)' }}>{sample.category}</div>
+                      </div>
+                      <Sparkles className="icon-tiny" style={{ color: 'var(--color-accent-sunset)' }} />
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', padding: 'var(--space-lg) var(--space-xl)', borderTop: '1px solid var(--color-hairline)' }}>
@@ -1769,7 +2086,17 @@ const Dashboard = () => {
       )}
 
       <footer className="footer-bar">
-        <div>© 2026 LEXIS CORP • SOC 2 TYPE II • 256-BIT AES</div>
+        <div className="footer-left">
+          <span className="footer-brand">Lexis</span>
+          <span className="footer-sep">/</span>
+          <span>Isolated Tenant Storage</span>
+        </div>
+        <div className="footer-right">
+          <span className="footer-status-pill">
+            <span className="status-live-indicator" />
+            Vector Engine Active
+          </span>
+        </div>
       </footer>
     </div>
   );
