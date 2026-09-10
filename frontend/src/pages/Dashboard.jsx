@@ -1419,37 +1419,39 @@ const Dashboard = () => {
         </aside>
 
         <main className="main-content-area">
-          {/* Clean chat header — name only, attach doc in corner */}
-          <div className="section-label-bar">
-            {activeChat && (
-              <button 
-                type="button" 
-                className="btn-ghost mobile-back-btn md:hidden"
-                onClick={() => setActiveChat(null)}
-                title="Back to session list"
-                aria-label="Back to session list"
-                style={{ marginRight: '8px', padding: '4px', color: 'var(--color-ink)', display: 'flex', alignItems: 'center' }}
-              >
-                <ChevronLeft className="icon" />
-              </button>
-            )}
-            <div className="label-title" style={{ overflow: 'hidden' }}>
-              <span style={{
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                maxWidth: '100%',
-                fontFamily: 'var(--font-sans)',
-                fontWeight: 400,
-                fontSize: '14px',
-                letterSpacing: 0,
-                textTransform: 'none',
-                color: 'var(--color-ink)',
-              }}>
-                {activeChat ? getChatTitle(activeChat) : 'Select or start a session'}
-              </span>
+          {/* Header Bar - only when active with messages or document */}
+          {(!(!activeChat?.current_doc_id && messages.length === 0 && !streamedResponse)) && (
+            <div className="section-label-bar">
+              {activeChat && (
+                <button 
+                  type="button" 
+                  className="btn-ghost mobile-back-btn md:hidden"
+                  onClick={() => setActiveChat(null)}
+                  title="Back to session list"
+                  aria-label="Back to session list"
+                  style={{ marginRight: '8px', padding: '4px', color: 'var(--color-ink)', display: 'flex', alignItems: 'center' }}
+                >
+                  <ChevronLeft className="icon" />
+                </button>
+              )}
+              <div className="label-title" style={{ overflow: 'hidden' }}>
+                <span style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '100%',
+                  fontFamily: 'var(--font-sans)',
+                  fontWeight: 400,
+                  fontSize: '14px',
+                  letterSpacing: 0,
+                  textTransform: 'none',
+                  color: 'var(--color-ink)',
+                }}>
+                  {activeChat ? getChatTitle(activeChat) : 'New Session'}
+                </span>
+              </div>
             </div>
-          </div>
+          )}
 
           <input 
             type="file" 
@@ -1480,315 +1482,325 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* Empty State Hero - Research Intake & Sample Intelligence */}
-          {!activeChat?.current_doc_id && messages.length === 0 && !streamedResponse && (
-            <div className="empty-state-hero">
-              <div className="empty-state-badge">
-                <span className="empty-badge-dot" />
-                DOCUMENT INTELLIGENCE PLATFORM
-              </div>
-
-              <div className="empty-state-brand">
-                <div className="empty-state-logo-box">
-                  <LexisLogo size={32} />
+          {/* 1. Empty State: Centered Research Hub (Claude / Perplexity style) */}
+          {!activeChat?.current_doc_id && messages.length === 0 && !streamedResponse ? (
+            <div className="central-research-hub">
+              <div className="central-hub-brand">
+                <div className="central-hub-logo">
+                  <LexisLogo size={36} />
                 </div>
-                <h1 className="empty-state-headline">Understand documents. Verify every claim.</h1>
-                <p className="empty-state-subheadline">
-                  Upload complex technical specifications, legal agreements, or financial filings to extract verified answers with passage-level citation provenance.
+                <h1 className="central-hub-title">Where would you like to begin?</h1>
+                <p className="central-hub-subtitle">
+                  Ask complex research questions, analyze documentation, or verify claims across primary sources.
                 </p>
               </div>
 
-              {/* Research Intake Card */}
-              <div 
-                className={`empty-state-intake-card ${isHeroDragging ? 'drag-over' : ''} ${isUploading ? 'is-uploading' : ''}`}
-                onClick={() => !isUploading && fileInputRef.current?.click()}
+              {/* Unified Central Research Card */}
+              <form 
+                onSubmit={handleSendQuery} 
+                className={`central-prompt-card ${isHeroDragging ? 'drag-over' : ''}`}
                 onDragOver={handleHeroDragOver}
                 onDragLeave={handleHeroDragLeave}
                 onDrop={handleHeroDrop}
               >
-                {isUploading ? (
-                  <div className="intake-uploading-state">
-                    <div className="spinner" />
-                    <div className="intake-upload-title">Processing & Indexing Document…</div>
-                    <div className="intake-upload-meta">Extracting passages, generating embeddings, and building vector index</div>
+                {isHeroDragging ? (
+                  <div className="central-drag-overlay">
+                    <Upload className="icon-large" />
+                    <span>Drop document here to attach & index</span>
                   </div>
                 ) : (
                   <>
-                    <div className="intake-upload-icon-box">
-                      <Upload className="icon" />
-                    </div>
-                    <div className="intake-upload-content">
-                      <div className="intake-upload-title">
-                        <span>Drop documents here, or </span>
-                        <span className="intake-browse-link">browse files</span>
+                    <textarea 
+                      ref={textareaRef}
+                      className="central-textarea"
+                      placeholder="Ask a research question, test a prompt, or drop a document to index..."
+                      value={queryText}
+                      onChange={(e) => {
+                        setQueryText(e.target.value);
+                        e.target.style.height = 'auto';
+                        e.target.style.height = Math.min(e.target.scrollHeight, 180) + 'px';
+                      }}
+                      disabled={isGenerating || isUploading}
+                      rows={2}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendQuery();
+                        }
+                      }}
+                      autoFocus
+                    />
+
+                    <div className="central-prompt-toolbar">
+                      <div className="central-toolbar-left">
+                        <button
+                          type="button"
+                          className="central-action-btn"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={isUploading}
+                          title="Attach document (PDF, DOCX, TXT)"
+                        >
+                          <Paperclip className="icon-small" />
+                          <span>Attach Document</span>
+                        </button>
+
+                        <button
+                          id="web-search-toggle"
+                          type="button"
+                          className={`central-action-btn ${webSearchEnabled ? 'active' : ''}`}
+                          onClick={() => setWebSearchEnabled(!webSearchEnabled)}
+                          title="Enable web search to augment document retrieval with live web sources"
+                        >
+                          <Globe className="icon-small" />
+                          <span>Web Search</span>
+                          {webSearchEnabled && <span className="central-live-dot" />}
+                        </button>
                       </div>
-                      <div className="intake-upload-meta">
-                        <span>PDF, DOCX, TXT, MD</span>
-                        <span className="intake-meta-dot">•</span>
-                        <span>Up to 25 MB</span>
-                        <span className="intake-meta-dot">•</span>
-                        <span>Isolated Tenant Storage</span>
+
+                      <div className="central-toolbar-right">
+                        <span className="central-shortcut-hint">⌘ ↵ Send</span>
+                        <button 
+                          type="submit" 
+                          className="central-submit-btn"
+                          disabled={!queryText.trim() || isGenerating || isUploading}
+                          title="Send query"
+                        >
+                          {isGenerating ? <div className="spinner-tiny" /> : <ArrowRight className="icon-small" />}
+                        </button>
                       </div>
                     </div>
                   </>
                 )}
-              </div>
+              </form>
 
-              {/* Pre-Indexed Sample Intelligence */}
-              <div className="empty-state-samples-section">
-                <div className="samples-section-header">
-                  <span className="samples-header-title">PRE-INDEXED SAMPLE INTELLIGENCE</span>
-                  <span className="samples-header-hint">Instant test without local files</span>
-                </div>
-
-                <div className="samples-grid">
+              {/* Minimal Query Starter Chips Directly Below Input */}
+              <div className="central-starters-wrapper">
+                <div className="central-starters-grid">
                   {SAMPLE_CORPORA.map((sample) => (
-                    <div key={sample.id} className="sample-card">
-                      <div className="sample-card-header">
-                        <div className="sample-card-title-row">
-                          <FileText className="icon-small sample-file-icon" />
-                          <span className="sample-card-title">{sample.title}</span>
-                        </div>
-                        <span className="sample-category-tag">{sample.category}</span>
-                      </div>
-
-                      <p className="sample-question-text">
-                        "{sample.question}"
-                      </p>
-
-                      <div className="sample-card-actions">
+                    <div 
+                      key={sample.id} 
+                      className="central-starter-card"
+                      onClick={() => handleUseSamplePrompt(sample.question)}
+                    >
+                      <div className="starter-card-header">
+                        <span className="starter-card-tag">{sample.category}</span>
                         <button
                           type="button"
-                          className="sample-action-btn primary"
+                          className="starter-load-btn"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleLoadSample(sample);
                           }}
                           disabled={isUploading}
+                          title="Load sample document into vector index"
                         >
                           <Sparkles className="icon-tiny" />
-                          <span>Load & Query</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="sample-action-btn secondary"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleUseSamplePrompt(sample.question);
-                          }}
-                        >
-                          <span>Use Prompt</span>
+                          <span>Index Sample</span>
                         </button>
                       </div>
+                      <p className="starter-card-prompt">
+                        "{sample.question}"
+                      </p>
                     </div>
                   ))}
                 </div>
               </div>
             </div>
-          )}
+          ) : (
+            /* 2. Active State: Chat Feed + Docked Input Bar at Bottom */
+            <>
+              <div className="chat-feed">
+                {activeChat?.current_doc_id && (
+                  <DocumentOverview 
+                    activeChat={activeChat} 
+                    onRegenerate={handleRegenerateSummary}
+                  />
+                )}
 
-          {/* Chat Feed Area - shown if there are messages or a document has been uploaded */}
-          {(messages.length > 0 || streamedResponse || activeChat?.current_doc_id) && (
-            <div className="chat-feed">
-              {activeChat?.current_doc_id && (
-                <DocumentOverview 
-                  activeChat={activeChat} 
-                  onRegenerate={handleRegenerateSummary}
-                />
-              )}
+                {messages.map((m, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`message-bubble ${m.role === 'user' ? 'message-bubble-user' : m.is_error ? 'message-bubble-error' : 'message-bubble-assistant'}`}
+                    style={{
+                      padding: getBubblePadding(m.role),
+                      fontSize: getBubbleFontSize(),
+                      lineHeight: fontSize === 'small' ? '1.4' : fontSize === 'large' ? '1.8' : '1.6'
+                    }}
+                  >
+                    {m.system_warning && (
+                      <div className="system-warning-pill">
+                        <AlertTriangle className="icon-small" />
+                        <span>{m.system_warning}</span>
+                      </div>
+                    )}
+                    {m.role === 'user' || m.is_error ? (
+                      <div style={{ marginBottom: '6px', whiteSpace: 'pre-wrap' }}>{m.content}</div>
+                    ) : (
+                      <FormattedMessage 
+                        content={m.content} 
+                        citations={m.citations} 
+                        onCitationClick={(cit) => setCitationPanel(cit)} 
+                      />
+                    )}
 
-              {messages.map((m, idx) => (
-                <div 
-                  key={idx} 
-                  className={`message-bubble ${m.role === 'user' ? 'message-bubble-user' : m.is_error ? 'message-bubble-error' : 'message-bubble-assistant'}`}
-                  style={{
-                    padding: getBubblePadding(m.role),
-                    fontSize: getBubbleFontSize(),
-                    lineHeight: fontSize === 'small' ? '1.4' : fontSize === 'large' ? '1.8' : '1.6'
-                  }}
-                >
-                  {m.system_warning && (
-                    <div className="system-warning-pill">
-                      <AlertTriangle className="icon-small" />
-                      <span>{m.system_warning}</span>
-                    </div>
-                  )}
-                  {m.role === 'user' || m.is_error ? (
-                    <div style={{ marginBottom: '6px', whiteSpace: 'pre-wrap' }}>{m.content}</div>
-                  ) : (
+                    {/* Web Sources Grid Display */}
+                    {(() => {
+                      const sources = m.web_sources || (m.message_id && webSourcesMap[m.message_id]) || webSourcesMap[idx];
+                      if (!sources || sources.length === 0) return null;
+                      return (
+                        <div className="web-sources-section">
+                          <div className="web-sources-header">
+                            <Globe className="icon-small" />
+                            <span>Web Sources</span>
+                          </div>
+                          <div className="web-sources-grid">
+                            {sources.map((ws, wsIdx) => (
+                              <a 
+                                key={wsIdx} 
+                                href={ws.url} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="web-source-card"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div className="ws-card-title">
+                                  <span>{ws.title}</span>
+                                  <ExternalLink className="icon-tiny" />
+                                </div>
+                                <div className="ws-card-snippet">{ws.snippet}</div>
+                                <div className="ws-card-url">{new URL(ws.url).hostname}</div>
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                ))}
+
+                {streamedResponse && (
+                  <div 
+                    className="message-bubble message-bubble-assistant"
+                    style={{
+                      padding: getBubblePadding('assistant'),
+                      fontSize: getBubbleFontSize(),
+                      lineHeight: fontSize === 'small' ? '1.4' : fontSize === 'large' ? '1.8' : '1.6'
+                    }}
+                  >
                     <FormattedMessage 
-                      content={m.content} 
-                      citations={m.citations || citations} 
+                      content={streamedResponse} 
+                      citations={citations} 
                       onCitationClick={(cit) => setCitationPanel(cit)} 
                     />
-                  )}
-                  <div style={{ fontSize: '10px', opacity: 0.7, textTransform: 'uppercase', textAlign: m.role === 'user' ? 'right' : 'left', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                    {(m.role === 'assistant' && m.provider) ? `${m.provider.toUpperCase()} • ` : ''}
-                    {new Date(m.created_at).toLocaleTimeString()}
-                    {(m.had_web_search || (m.web_sources && m.web_sources.length > 0)) && (
-                      <span className="web-search-indicator">
-                        <Globe className="icon-tiny" /> Searched the web • {m.web_sources ? m.web_sources.length : m.web_source_count} source{(m.web_sources ? m.web_sources.length : m.web_source_count) !== 1 ? 's' : ''}
-                      </span>
-                    )}
+                    <span className="streaming-cursor">█</span>
                   </div>
+                )}
 
-                  {/* Render web source cards if available for this message */}
-                  {(() => {
-                    const sources = m.web_sources || (m.id && webSourcesMap[m.id]) || webSourcesMap[idx];
-                    if (!sources || sources.length === 0) return null;
-                    return (
-                      <div className="web-sources-section">
-                        <div className="web-sources-header">
-                          <Globe className="icon-small" />
-                          <span>Web Sources</span>
-                        </div>
-                        <div className="web-sources-grid">
-                          {sources.map((ws, wsIdx) => (
-                            <a 
-                              key={wsIdx} 
-                              href={ws.url} 
-                              target="_blank" 
-                              rel="noopener noreferrer" 
-                              className="web-source-card"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <div className="ws-card-title">
-                                <span>{ws.title}</span>
-                                <ExternalLink className="icon-tiny" />
-                              </div>
-                              <div className="ws-card-snippet">{ws.snippet}</div>
-                              <div className="ws-card-url">{new URL(ws.url).hostname}</div>
-                            </a>
-                          ))}
-                        </div>
+                {isGenerating && !streamedResponse && (
+                  <div 
+                    className="message-bubble message-bubble-assistant"
+                    style={{
+                      padding: getBubblePadding('assistant'),
+                      fontSize: getBubbleFontSize(),
+                      lineHeight: fontSize === 'small' ? '1.4' : fontSize === 'large' ? '1.8' : '1.6'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div className="thinking-indicator">
+                        <div className="thinking-dot"></div>
+                        <div className="thinking-dot"></div>
+                        <div className="thinking-dot"></div>
                       </div>
-                    );
-                  })()}
-                </div>
-              ))}
-
-              {streamedResponse && (
-                <div 
-                  className="message-bubble message-bubble-assistant"
-                  style={{
-                    padding: getBubblePadding('assistant'),
-                    fontSize: getBubbleFontSize(),
-                    lineHeight: fontSize === 'small' ? '1.4' : fontSize === 'large' ? '1.8' : '1.6'
-                  }}
-                >
-                  <FormattedMessage 
-                    content={streamedResponse} 
-                    citations={citations} 
-                    onCitationClick={(cit) => setCitationPanel(cit)} 
-                  />
-                  <span className="streaming-cursor">█</span>
-                </div>
-              )}
-
-              {isGenerating && !streamedResponse && (
-                <div 
-                  className="message-bubble message-bubble-assistant"
-                  style={{
-                    padding: getBubblePadding('assistant'),
-                    fontSize: getBubbleFontSize(),
-                    lineHeight: fontSize === 'small' ? '1.4' : fontSize === 'large' ? '1.8' : '1.6'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div className="thinking-indicator">
-                      <div className="thinking-dot"></div>
-                      <div className="thinking-dot"></div>
-                      <div className="thinking-dot"></div>
+                      <span style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '0.5px' }}>
+                        {webSearchEnabled 
+                          ? (webSearchCount > 0 
+                              ? `WEB SEARCH COMPLETE (${webSearchCount} sources) • GENERATING RESPONSE...`
+                              : 'SEARCHING WEB & VECTOR INDEX...')
+                          : 'SEARCHING VECTOR INDEX & GENERATING RESPONSE...'}
+                      </span>
                     </div>
-                    <span style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '0.5px' }}>
-                      {webSearchEnabled 
-                        ? (webSearchCount > 0 
-                            ? `WEB SEARCH COMPLETE (${webSearchCount} sources) • GENERATING RESPONSE...`
-                            : 'SEARCHING WEB & VECTOR INDEX...')
-                        : 'SEARCHING VECTOR INDEX & GENERATING RESPONSE...'}
-                    </span>
                   </div>
-                </div>
-              )}
+                )}
 
-              <div ref={messagesEndRef} />
-            </div>
-          )}
-
-          <div className="chat-input-bar">
-            <form onSubmit={handleSendQuery} className="chat-input-card">
-              {activeChat?.current_doc_id && (
-                <div className="chat-input-context-row">
-                  <div className="input-context-pill">
-                    <FileText className="icon-tiny" />
-                    <span className="input-context-name">{activeChat.display_name || activeChat.generated_title || 'Document Active'}</span>
-                  </div>
-                </div>
-              )}
-
-              <textarea 
-                ref={textareaRef}
-                className="chat-textarea"
-                placeholder={activeChat?.current_doc_id 
-                  ? "Ask questions about this document... (Enter to send, Shift+Enter for newline)" 
-                  : (webSearchEnabled 
-                      ? "Search web intelligence and primary sources... (Enter to send)" 
-                      : "Type a query, test a prompt, or drop a document to begin...")}
-                value={queryText}
-                onChange={(e) => {
-                  setQueryText(e.target.value);
-                  e.target.style.height = 'auto';
-                  e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px';
-                }}
-                disabled={isGenerating}
-                rows={1}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendQuery();
-                  }
-                }}
-              />
-
-              <div className="chat-input-toolbar">
-                <div className="chat-toolbar-left">
-                  <button
-                    id="web-search-toggle"
-                    type="button"
-                    className={`toolbar-toggle-btn ${webSearchEnabled ? 'active' : ''}`}
-                    onClick={() => setWebSearchEnabled(!webSearchEnabled)}
-                    title="Enable web search to augment document retrieval with live web sources"
-                  >
-                    <Globe className="icon-small" />
-                    <span>Web Search</span>
-                    {webSearchEnabled && <span className="toolbar-dot" />}
-                  </button>
-
-                  <button
-                    type="button"
-                    className="toolbar-action-btn"
-                    onClick={() => fileInputRef.current?.click()}
-                    title="Attach document to active session"
-                  >
-                    <Paperclip className="icon-small" />
-                    <span className="toolbar-btn-text">Attach</span>
-                  </button>
-                </div>
-
-                <div className="chat-toolbar-right">
-                  <span className="input-shortcut-hint">⌘ ↵ Send</span>
-                  <button 
-                    type="submit" 
-                    className="chat-submit-btn"
-                    disabled={!queryText.trim() || isGenerating}
-                    title="Send query"
-                  >
-                    {isGenerating ? <div className="spinner-tiny" /> : <ArrowRight className="icon-small" />}
-                  </button>
-                </div>
+                <div ref={messagesEndRef} />
               </div>
-            </form>
-          </div>
+
+              <div className="chat-input-bar">
+                <form onSubmit={handleSendQuery} className="chat-input-card">
+                  {activeChat?.current_doc_id && (
+                    <div className="chat-input-context-row">
+                      <div className="input-context-pill">
+                        <FileText className="icon-tiny" />
+                        <span className="input-context-name">{activeChat.display_name || activeChat.generated_title || 'Document Active'}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <textarea 
+                    ref={textareaRef}
+                    className="chat-textarea"
+                    placeholder={activeChat?.current_doc_id 
+                      ? "Ask questions about this document... (Enter to send, Shift+Enter for newline)" 
+                      : (webSearchEnabled 
+                          ? "Search web intelligence and primary sources... (Enter to send)" 
+                          : "Type a query, test a prompt, or drop a document to begin...")}
+                    value={queryText}
+                    onChange={(e) => {
+                      setQueryText(e.target.value);
+                      e.target.style.height = 'auto';
+                      e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px';
+                    }}
+                    disabled={isGenerating}
+                    rows={1}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendQuery();
+                      }
+                    }}
+                  />
+
+                  <div className="chat-input-toolbar">
+                    <div className="chat-toolbar-left">
+                      <button
+                        id="web-search-toggle"
+                        type="button"
+                        className={`toolbar-toggle-btn ${webSearchEnabled ? 'active' : ''}`}
+                        onClick={() => setWebSearchEnabled(!webSearchEnabled)}
+                        title="Enable web search to augment document retrieval with live web sources"
+                      >
+                        <Globe className="icon-small" />
+                        <span>Web Search</span>
+                        {webSearchEnabled && <span className="toolbar-dot" />}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="toolbar-action-btn"
+                        onClick={() => fileInputRef.current?.click()}
+                        title="Attach document to active session"
+                      >
+                        <Paperclip className="icon-small" />
+                        <span className="toolbar-btn-text">Attach</span>
+                      </button>
+                    </div>
+
+                    <div className="chat-toolbar-right">
+                      <span className="input-shortcut-hint">⌘ ↵ Send</span>
+                      <button 
+                        type="submit" 
+                        className="chat-submit-btn"
+                        disabled={!queryText.trim() || isGenerating}
+                        title="Send query"
+                      >
+                        {isGenerating ? <div className="spinner-tiny" /> : <ArrowRight className="icon-small" />}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </>
+          )}
         </main>
 
         {/* ── Citation Sibling Panel (compresses chat feed on desktop) ──────── */}
