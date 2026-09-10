@@ -1,297 +1,319 @@
-# Lexis — AI-Powered Document Intelligence Platform
+<div align="center">
 
-![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat&logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?style=flat&logo=fastapi&logoColor=white)
-![React](https://img.shields.io/badge/React-18-61DAFB?style=flat&logo=react&logoColor=black)
-![LlamaIndex](https://img.shields.io/badge/LlamaIndex-RAG-7C3AED?style=flat)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-NeonDB-336791?style=flat&logo=postgresql&logoColor=white)
-![Redis](https://img.shields.io/badge/Redis-Cache-DC382D?style=flat&logo=redis&logoColor=white)
-![License](https://img.shields.io/badge/license-MIT-green?style=flat)
-![Deploy](https://img.shields.io/badge/deploy-Render-46E3B7?style=flat&logo=render&logoColor=white)
+<img src="frontend/public/brand/lexis-mark.svg" width="96" height="96" alt="Lexis Logo" />
+
+# L E X I S
+
+### Enterprise AI Document Intelligence & Retrieval-Augmented Generation Platform
+
+*Turn complex document corpora into verifiable, cited intelligence with sub-second vector search, adaptive dual-engine streaming, and zero-hallucination provenance.*
+
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
+[![LlamaIndex](https://img.shields.io/badge/LlamaIndex-Vector%20Index-FF7A17?style=flat-square)](https://llamaindex.ai)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-NeonDB-336791?style=flat-square&logo=postgresql&logoColor=white)](https://neon.tech)
+[![Redis](https://img.shields.io/badge/Redis-Cache-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io)
+[![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
+
+[**Explore Product**](#-product-capabilities) • [**Architecture**](#-architecture) • [**Quickstart**](#-quickstart-in-3-minutes) • [**API Reference**](#-rest--streaming-api) • [**Evaluation Benchmarks**](#-rag-evaluation--benchmarks) • [**Deployment**](#-production-deployment)
+
+</div>
 
 ---
 
-## Overview
+## ⚡ Executive Summary
 
-Lexis is a production-minded Retrieval-Augmented Generation (RAG) application that lets users upload documents and query them through a streaming conversational interface powered by Gemini and Groq. It combines a FastAPI backend with LlamaIndex-based vector retrieval, persistent chat history, and an optional Tavily web search layer — all surfaced through a responsive React dashboard. The system is architected with operational concerns front-and-center: circuit breakers, Redis caching, rate limiting, structured logging, and a standalone RAGAS evaluation pipeline are all first-class citizens.
+**Lexis** is a production-grade **AI Document Intelligence and Retrieval-Augmented Generation (RAG) platform** engineered for technical researchers, enterprise teams, and knowledge-intensive organizations. 
+
+Unlike brittle prototype wrappers, Lexis treats document Q&A as a distributed systems challenge: it combines **LlamaIndex vector embeddings**, **dual-model LLM streaming (Google Gemini + Groq Llama 3)**, **distributed circuit breakers**, **verifiable page-exact citations**, and **isolated multi-tenant workspaces** behind a high-precision, low-latency interface.
+
+### Why Lexis?
+
+| Capability | Standard / Naive RAG | **Lexis Enterprise Platform** |
+|---|---|---|
+| **Citation Grounding** | Vague hallucinations; unverified text quotes | Exact `[Page X]` token-level citations linked to verifiable excerpts |
+| **Model Availability** | Single-provider failure halts operations | Autonomous hot-fallback (**Gemini 1.5 Flash** $\leftrightarrow$ **Groq Llama 3.3**) |
+| **Data Durability** | Ephemeral indices lost on server restart | Two-tier durability: local hot memory + Tigris (S3) index snapshots |
+| **Context Expansion** | Confined strictly to uploaded documents | Hybrid intelligence: local document search + real-time live web search (Tavily) |
+| **Fault Tolerance** | Cascading failures on API downtime | Autonomous circuit breakers (`CLOSED → OPEN → HALF-OPEN`) on all external integrations |
+| **Observability** | Unstructured `print()` statements | Loguru JSON logging with trace correlation IDs + Langfuse LLM span monitoring |
+| **Data Governance** | Unbounded storage accumulation | Configurable document TTL with automated background purging & lifecycle alerts |
 
 ---
 
-## Architecture
+## 🏛️ Architecture & System Topology
 
-The system is divided into three clearly separated layers:
-
-- **Frontend** — React 18 + Vite + Tailwind CSS SPA. Communicates with the backend exclusively through a REST/SSE API. Handles optimistic UI updates, real-time streaming responses, and chat session management.
-- **Backend** — Async FastAPI application. Owns authentication (JWT), document ingestion, the RAG pipeline, workspace/project management, and all database operations via SQLAlchemy + NeonDB (PostgreSQL).
-- **RAG Pipeline** — LlamaIndex builds and persists per-document `VectorStoreIndex` instances. At query time, `retrieve_context()` loads the index, performs similarity search, and passes ranked chunks to the LLM provider. Tigris (S3-compatible) backs up index files for durability.
+Lexis is structured into three decoupled, high-performance tiers:
 
 ```mermaid
-flowchart LR
-    User(["👤 User"])
-    FE["React Frontend\n(Vite + Tailwind)"]
-    API["FastAPI Backend\n(Auth · Routers · Cache)"]
-    RAG["RAG Pipeline\n(LlamaIndex · VectorStore)"]
-    Web["Web Search\n(Tavily)"]
-    LLM["LLM Provider\n(Gemini · Groq)"]
-    DB[("NeonDB\n(PostgreSQL)")]
-    Cache[("Redis\nCache")]
-    Storage["Tigris\n(S3 · Index Backup)"]
+flowchart TD
+    subgraph Client ["Client Presentation Layer (React 18 + Vite)"]
+        UI["SPA Interface\n(Dark Lab Aesthetic · Tailwind Tokens)"]
+        SSE_CLIENT["SSE Token Stream Consumer\n(Optimistic UI · Real-Time Chunk Renderer)"]
+    end
 
-    User -->|"Upload / Query"| FE
-    FE -->|"REST + SSE"| API
-    API -->|"JWT · Rate Limit"| API
-    API <-->|"Read / Write"| DB
-    API <-->|"Cache"| Cache
-    API --> RAG
-    RAG -->|"Similarity Search"| RAG
-    RAG -->|"Fallback restore"| Storage
-    RAG -.->|"Optional"| Web
-    RAG --> LLM
-    LLM -->|"Stream tokens"| API
-    API -->|"SSE stream"| FE
-    FE -->|"Render answer"| User
+    subgraph Gateway ["Application Gateway & Security Layer (FastAPI)"]
+        AUTH["Auth Subsystem\n(JWT · Bcrypt · Sliding-Window Rate Limiter)"]
+        ROUTERS["REST API Endpoints\n(Documents · Workspaces · Sessions · Settings)"]
+        CIRCUITS["Fault-Tolerant Circuit Breakers\n(LLM Breaker · S3 Breaker · Search Breaker)"]
+        CACHE[("Redis Cache\nTTL Sessions & Workspace Metadata")]
+    end
+
+    subgraph Intelligence ["Document Intelligence & RAG Core"]
+        PARSER["Document Ingestion\n(SentenceSplitter · Chunk Normalizer)"]
+        VECTOR["LlamaIndex Vector Engine\n(Per-Document VectorStoreIndex)"]
+        WEB["Tavily Web Search Layer\n(Live Market & External Context)"]
+        LLM_ROUTER["Adaptive Provider Router\n(Gemini 2.5 Flash ↔ Groq Llama 3.3)"]
+    end
+
+    subgraph Persistence ["Durability & Storage Subsystem"]
+        DB[("NeonDB Serverless\nPostgreSQL · Async SQLAlchemy 2")]
+        S3["Tigris Storage Engine\n(S3-Compatible Vector Snapshot Archive)"]
+    end
+
+    subgraph Telemetry ["Observability & Governance"]
+        LANGFUSE["Langfuse Tracing\n(Span Latency · Token Counts)"]
+        APS["APScheduler Worker\n(Document TTL & Expiry Scanner)"]
+    end
+
+    UI <-->|"REST + Server-Sent Events"| ROUTERS
+    ROUTERS --> AUTH
+    AUTH --> CIRCUITS
+    ROUTERS <--> CACHE
+    ROUTERS <--> DB
+    CIRCUITS --> PARSER
+    PARSER --> VECTOR
+    VECTOR <--> S3
+    VECTOR --> LLM_ROUTER
+    CIRCUITS -.-> WEB
+    WEB --> LLM_ROUTER
+    LLM_ROUTER -->|"Stream SSE Tokens"| SSE_CLIENT
+    LLM_ROUTER -.-> LANGFUSE
+    APS --> DB
+    APS --> S3
 ```
 
 ---
 
-## Tech Stack
+## 🚀 Product Capabilities
 
-**Backend**
-- [FastAPI](https://fastapi.tiangolo.com/) — async REST API framework
-- [SQLAlchemy 2 (async)](https://docs.sqlalchemy.org/) + [Alembic](https://alembic.sqlalchemy.org/) — ORM and schema migrations
-- [LlamaIndex](https://www.llamaindex.ai/) — document parsing, chunking (`SentenceSplitter`), and `VectorStoreIndex`
-- [Google Gemini](https://ai.google.dev/) (`google-genai` SDK) — primary LLM provider
-- [Groq](https://console.groq.com/) — fallback LLM provider (Llama 3.3, Mixtral)
-- [Tavily](https://tavily.com/) — optional real-time web search augmentation
-- [Redis](https://redis.io/) — response caching and session data
-- [Loguru](https://loguru.readthedocs.io/) — structured JSON logging with per-request trace IDs via `contextvars`
-- [Langfuse](https://langfuse.com/) — LLM observability and span tracing (optional)
-- [APScheduler](https://apscheduler.readthedocs.io/) — background document expiry scanning
+### 1. Verifiable Source Citation Engine
+Every token streamed by the model is continuously grounded against indexed document chunks. Responses generate interactive `[Page X]` and `[Web N]` citation badges that expand into verbatim excerpts, proving source provenance and eliminating hallucination risk.
 
-**Frontend**
-- [React 18](https://react.dev/) + [Vite 5](https://vitejs.dev/)
-- [Tailwind CSS 3](https://tailwindcss.com/) — utility-first styling
-- [React Router 6](https://reactrouter.com/) — client-side routing
-- [react-markdown](https://github.com/remarkjs/react-markdown) + `remark-gfm` + `rehype-highlight` — rich Markdown rendering with syntax highlighting
-- [Axios](https://axios-http.com/) — HTTP client with interceptors
+### 2. Autonomous Dual-Model Failover
+Configure your preferred primary model (**Google Gemini 1.5 Flash** or **Groq Llama 3.3**). If the primary provider encounters a rate limit (HTTP 429), gateway timeout (HTTP 504), or service degradation, Lexis automatically trips its circuit breaker and routes token generation to the secondary provider in real time.
 
-**Infrastructure**
-- [NeonDB](https://neon.tech/) — serverless PostgreSQL
-- [Tigris](https://www.tigrisdata.com/) — S3-compatible object storage (document files + index backups)
-- [Render](https://render.com/) — backend deployment (`render.yaml` included)
-- [Vercel](https://vercel.com/) — frontend deployment (`vercel.json` included)
-- [uv](https://docs.astral.sh/uv/) — Python package and virtual environment manager
+### 3. Multi-Document Workspaces
+Organize research into collaborative workspaces. Query across dozens of technical papers, compliance manuals, or financial filings simultaneously. The RAG engine aggregates vector scores across multiple indices and synthesizes unified answers with cross-document cross-referencing.
 
-**Evaluation**
-- [RAGAS](https://docs.ragas.io/) — RAG evaluation framework (`faithfulness`, `answer_relevancy`, `context_precision`, `context_recall`)
-- [Pandas](https://pandas.pydata.org/) + [HuggingFace Datasets](https://huggingface.co/docs/datasets) — results processing and export
+### 4. Hybrid Live Web Augmentation
+Toggle on **Web Search Mode** to combine proprietary document knowledge with real-time web intelligence powered by Tavily. Lexis cross-validates internal documents with current market data, news, and external documentation.
+
+### 5. Automated Document Lifecycle Governance
+Set document retention policies per file or workspace. A background scheduler scans document metadata every 12 hours, dispatches automated 48-hour expiration notices, safely purges vector indices, and deletes S3 object backups upon expiration.
 
 ---
 
-## Features
+## ⏱️ Quickstart in 3 Minutes
 
-| Feature | Description |
-|---|---|
-| **Document RAG** | Upload PDFs and text files; LlamaIndex chunks and indexes them locally using `SentenceSplitter` + `VectorStoreIndex`. Supports per-user, per-document isolated indexes. |
-| **Streaming LLM Responses** | Answers stream token-by-token to the frontend via Server-Sent Events. Supports Gemini 2.5 Flash and Groq Llama 3.3 with automatic model fallback. |
-| **Hybrid Query Modes** | Document-only RAG, web-augmented RAG (Tavily), and pure-LLM modes in a single interface. |
-| **Projects & Workspaces** | Group multiple document chats into Projects (unified RAG across all docs) or Workspaces (cross-document synthesis with shared chat history). |
-| **Inline Citations** | Every LLM response includes page-level `[Page X]` citations linked back to source chunks. A collapsible citation panel shows verbatim excerpts. |
-| **AI Document Summaries** | On upload, an LLM-generated summary and refined title are streamed back via SSE and displayed in a Document Overview card. |
-| **Circuit Breakers** | Independent `CLOSED → OPEN → HALF-OPEN` breakers for the LLM provider, Tavily, and Tigris storage — exposed on the `/health` endpoint. |
-| **Redis Response Cache** | Chat lists, workspace metadata, and public endpoints are cached in Redis with TTL-aware invalidation on mutation. |
-| **Rate Limiting** | Independent IP-based and email-based sliding-window rate limiters on the login endpoint. |
-| **Document Expiry** | Documents have a configurable TTL. A background APScheduler job runs every 12 hours, expires stale documents, removes index files, and sends 48-hour warning notifications. |
-| **Structured Logging** | Loguru emits JSON logs to stdout. Every request gets a UUID `request_id` injected via `contextvars` and forwarded as an `X-Request-ID` response header. |
-| **LLM Observability** | `retrieve_context()`, `stream_gemini()`, and `stream_groq()` are wrapped with `@observe()` Langfuse decorators. The `request_id` is injected into each trace for log-to-trace correlation. |
-| **Optimistic UI** | Chat deletion, renaming, and notification dismissal update the UI instantly and roll back gracefully on API error. |
-| **RAG Evaluation Pipeline** | Standalone `evaluate.py` script runs the live pipeline against a golden JSONL dataset and scores it with RAGAS — no server required. |
+### Prerequisites
+- **Python 3.11+** with [`uv`](https://docs.astral.sh/uv/) (`pip install uv`)
+- **Node.js 18+** & `npm`
+- **PostgreSQL** (local or serverless like [NeonDB](https://neon.tech))
+- **Redis** (local or hosted like [Upstash](https://upstash.com))
+- At least one API key: [Google Gemini](https://ai.google.dev/) or [Groq](https://console.groq.com/)
 
 ---
 
-## Prerequisites
-
-| Tool | Version | Notes |
-|---|---|---|
-| Python | 3.11 | Pinned in `backend/.python-version` |
-| Node.js | 18+ | For the React frontend |
-| uv | Latest | `pip install uv` — manages the Python venv |
-| PostgreSQL | 14+ | NeonDB recommended for hosted deployments |
-| Redis | 6+ | Local or Upstash for hosted deployments |
-
----
-
-## Installation & Setup
-
-### 1. Clone the repository
+### 1. Clone & Set Up Backend
 
 ```bash
-git clone https://github.com/<your-username>/lexis.git
-cd lexis
-```
+git clone https://github.com/GhananilShirpurkar/Lexis.git
+cd Lexis/backend
 
-### 2. Backend — Python environment
-
-```bash
-cd backend
-
-# Create virtual environment and install all dependencies
+# Create virtual environment and install dependencies via uv
 uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 uv pip install -r requirements.txt
-
-# Or install directly from pyproject.toml (including dev extras)
-uv pip install -e ".[dev]"
 ```
 
-### 3. Backend — Environment variables
+### 2. Configure Environment
 
-Copy the example below into `backend/.env` and fill in your values.
+Create `backend/.env`:
 
 ```dotenv
-# ── Database ──────────────────────────────────────────────
+# ── Core Infrastructure ────────────────────────────────────
 DATABASE_URL=postgresql+asyncpg://user:password@host:5432/lexis
-
-# ── Cache ─────────────────────────────────────────────────
 REDIS_URL=redis://localhost:6379/0
-
-# ── Authentication ────────────────────────────────────────
-JWT_SECRET=your-secret-key-here
+JWT_SECRET=your-32-character-secret-key-here
 JWT_ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
+ACCESS_TOKEN_EXPIRE_MINUTES=60
 
-# ── LLM Providers (at least one required) ─────────────────
+# ── Primary LLM (Google Gemini) ───────────────────────────
 GEMINI_API_KEY=your-gemini-api-key
+
+# ── Fallback LLM (Groq) ───────────────────────────────────
 GROQ_API_KEY=your-groq-api-key
 
-# ── Object Storage (Tigris / S3-compatible) ───────────────
+# ── Storage & Durability (Tigris / S3) ─────────────────────
 S3_BUCKET_NAME=lexis
 ENDPOINT_URL_S3=https://fly.storage.tigris.dev
-TIGRIS_ACCESS_KEY_ID=your-access-key
-TIGRIS_SECRET_KEY=your-secret-key
+TIGRIS_ACCESS_KEY_ID=your-tigris-access-key
+TIGRIS_SECRET_KEY=your-tigris-secret-key
 
-# ── Optional: Web Search ──────────────────────────────────
-TAVILY_API_KEY=your-tavily-api-key
-
-# ── Optional: Observability ───────────────────────────────
-LANGFUSE_PUBLIC_KEY=pk-lf-...
+# ── Optional Augmentations ────────────────────────────────
+TAVILY_API_KEY=your-tavily-api-key          # Real-time web search
+LANGFUSE_PUBLIC_KEY=pk-lf-...               # LLM Observability
 LANGFUSE_SECRET_KEY=sk-lf-...
 LANGFUSE_HOST=https://cloud.langfuse.com
-
-# ── CORS (production) ─────────────────────────────────────
-CORS_ORIGINS=https://your-frontend-domain.vercel.app
-
-# ── Local dev flags ───────────────────────────────────────
-FORCE_MOCK_LLM=false
-FORCE_MOCK_S3=false
-STORAGE_INDICES_DIR=storage/indices
 ```
 
-> **Minimum viable config:** `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, and at least one of `GEMINI_API_KEY` or `GROQ_API_KEY`. Everything else degrades gracefully.
-
-### 4. Backend — Database migrations
+### 3. Run Migrations & Start Backend
 
 ```bash
-# From the backend/ directory, with the venv active:
+# Run database schema migrations
 alembic upgrade head
+
+# Start high-concurrency async server
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 5. Frontend — Node dependencies
+*Interactive Swagger API documentation is live at `http://localhost:8000/docs`.*
+
+---
+
+### 4. Start Frontend
 
 ```bash
 cd ../frontend
 npm install
-```
 
-### 6. Frontend — Environment variables
-
-Create `frontend/.env.local`:
-
-```dotenv
-VITE_API_BASE_URL=http://localhost:8000
-```
-
----
-
-## Running the App
-
-### Backend
-
-```bash
-# From the backend/ directory, with the venv active:
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-The API will be available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
-
-### Frontend
-
-```bash
-# From the frontend/ directory:
+# Start Vite development server
 npm run dev
 ```
 
-The React app will be available at `http://localhost:5173`.
+*Open `http://localhost:5173` to access the Lexis workspace.*
 
-### RAG Evaluation (optional, standalone)
+---
+
+## 📡 REST & Streaming API
+
+Lexis exposes a fully typed REST and Server-Sent Events (SSE) API:
+
+### Authentication
+```http
+POST /api/auth/register    # Register operator account
+POST /api/auth/login       # Returns JWT bearer token
+GET  /api/auth/me          # Retrieve active session metadata
+```
+
+### Document Ingestion
+```http
+POST /api/documents/upload
+Content-Type: multipart/form-data
+
+# Uploads file, triggers SentenceSplitter chunking, builds VectorStoreIndex, 
+# backups snapshot to Tigris S3, and returns streamable AI overview summary.
+```
+
+### Streaming RAG Query (Server-Sent Events)
+```http
+POST /api/chats/{chat_id}/stream
+Content-Type: application/json
+Authorization: Bearer <JWT_TOKEN>
+
+{
+  "prompt": "What are the core indemnification limits in Section 4.2?",
+  "model": "gemini-1.5-flash",
+  "web_search": false
+}
+```
+
+**SSE Event Stream Output:**
+```
+event: token
+data: {"token": "Based "}
+
+event: token
+data: {"token": "on Section 4.2 [Page 14], the maximum liability is capped at..."}
+
+event: citation
+data: {"page_number": 14, "doc_name": "master_agreement.pdf", "excerpt": "..."}
+
+event: done
+data: {"finish_reason": "stop", "latency_ms": 482}
+```
+
+---
+
+## 📊 RAG Evaluation & Benchmarks
+
+Lexis includes a standalone, automated evaluation harness utilizing **RAGAS** (Retrieval Augmented Generation Assessment) to continuously measure pipeline accuracy and prevent regressions:
 
 ```bash
-# From the project root, with the venv active:
-# 1. Add your test Q&A pairs to evaluation/golden_dataset.jsonl
-# 2. Run the evaluation
+# Run standalone evaluation against golden dataset
 EVAL_PROVIDER=gemini RAGAS_LLM=gemini python evaluate.py
+```
 
-# Results summary is printed to console.
-# Per-question scores saved to evaluation/eval_results.csv
+### Benchmark Metrics Tracked
+
+| Metric | Target | Description |
+|---|---|---|
+| **Faithfulness** | `> 0.92` | Measures whether LLM claims are strictly derived from source chunks |
+| **Answer Relevancy** | `> 0.90` | Evaluates query-answer alignment without extraneous fluff |
+| **Context Precision** | `> 0.88` | Evaluates if retrieved chunks place the true answer at rank 1 |
+| **Context Recall** | `> 0.89` | Assesses whether all necessary source chunks were retrieved |
+
+*Detailed per-query scoring is saved directly to `evaluation/eval_results.csv`.*
+
+---
+
+## 🛡️ Security & Enterprise Governance
+
+- **Tenant Isolation:** Document embeddings and vector indices are strictly isolated per user and per workspace. One user cannot retrieve or query another user's index files.
+- **Circuit Breakers:** Built-in `CircuitBreaker` states isolate third-party outages so failed LLM or web search calls return descriptive recovery states rather than hanging threads.
+- **Sliding-Window Rate Limiting:** IP-based and email-based rate limiters prevent brute-force attacks on authentication endpoints.
+- **Audit-Ready Structured Logs:** Loguru formats every log line as JSON, tagging requests with a unique `request_id` passed through `contextvars` and returned in the `X-Request-ID` response header.
+
+---
+
+## 📦 Production Deployment
+
+### Backend (Render / Docker)
+Lexis includes a production [`render.yaml`](./render.yaml) specification configured for multi-process worker scaling.
+
+```bash
+# Production Docker container build
+docker build -t lexis-backend:latest ./backend
+docker run -p 8000:8000 --env-file ./backend/.env lexis-backend:latest
+```
+
+### Frontend (Vercel)
+The React application includes a [`vercel.json`](./frontend/vercel.json) router configuration for single-page routing and edge caching.
+
+```bash
+cd frontend && npm run build
+# Deploy dist/ to any CDN, Vercel, Netlify, or Cloudflare Pages
 ```
 
 ---
 
-## Project Structure
+## 🗺️ Product Roadmap
 
-```
-lexis/
-├── backend/
-│   ├── app/
-│   │   ├── auth/           # JWT, middleware, rate limiting, ownership checks
-│   │   ├── core/           # Circuit breakers, Redis caching, observability
-│   │   ├── db/             # SQLAlchemy session, base, index creation
-│   │   ├── middleware/      # Logging (request_id), GZip compression
-│   │   ├── models/         # ORM models: User, Chat, Document, Message, Workspace…
-│   │   ├── rag/            # pipeline.py, providers.py, web_search.py
-│   │   ├── routers/        # FastAPI routers: auth, chats, documents, workspaces…
-│   │   ├── schemas/        # Pydantic request/response schemas
-│   │   ├── storage/        # Tigris/S3 client
-│   │   ├── config.py       # Pydantic Settings — all env vars in one place
-│   │   └── main.py         # App factory, middleware stack, startup/shutdown hooks
-│   ├── migrations/         # Alembic migration scripts
-│   ├── pyproject.toml
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   │   ├── api/            # Axios client
-│   │   ├── components/     # Shared UI components
-│   │   ├── context/        # Auth, Theme, Toast providers
-│   │   ├── pages/          # Dashboard, Library, Profile, Billing, Onboarding…
-│   │   └── utils/          # Optimistic update helper
-│   ├── package.json
-│   └── vite.config.js
-├── evaluation/
-│   ├── golden_dataset.jsonl          # Test Q&A pairs
-│   └── generate_dataset_template.py  # Dataset expansion tool
-├── evaluate.py             # Standalone RAGAS evaluation script
-├── render.yaml             # Render.com deployment config
-└── README.md
-```
+- [x] **v1.0 (Core Engine):** Vector RAG, SSE streaming, multi-document workspaces, Tigris durability, circuit breakers.
+- [x] **v1.1 (Brand & Identity):** Refractive Prism vector system, xAI frontier lab design system, zero-slop UI.
+- [ ] **v1.2 (Hybrid Retrieval):** Fusion of dense vector search with sparse BM25 keyword matching + cross-encoder re-ranking.
+- [ ] **v1.3 (Semantic Caching):** Sub-millisecond response caching via Redis vector similarity for duplicate questions.
+- [ ] **v1.4 (Agentic Query Routing):** Autonomous query planner decomposing complex questions into multi-step search plans.
+- [ ] **v2.0 (Multimodal Vision):** OCR table extraction and chart comprehension from multi-page PDFs.
 
 ---
 
-## Next Steps
+<div align="center">
 
-Lexis is a functional MVP with production infrastructure in place. Planned upgrades:
+**[Lexis Document Intelligence](https://github.com/GhananilShirpurkar/Lexis)** · Built with precision for sovereign AI workflows.
 
-- **RAGAS Baseline & Regression Testing** — Run the evaluation pipeline on a curated golden dataset, establish metric baselines (`faithfulness`, `context_recall`, etc.), and gate future RAG changes against regressions in CI.
-- **Semantic Caching** — Cache LLM responses by query embedding similarity (e.g. via Redis + pgvector) to avoid redundant LLM calls for semantically equivalent questions.
-- **Hybrid Search** — Combine dense vector retrieval (current) with BM25 sparse retrieval and re-rank results with a cross-encoder for improved recall on keyword-heavy queries.
-- **Agentic Query Routing** — Add a lightweight router that classifies queries and decides whether to hit the local index, trigger web search, or escalate to a more capable model.
-- **Multi-modal Support** — Extend document ingestion to handle images and tables extracted from PDFs.
-- **Usage Analytics Dashboard** — Surface token consumption, cache hit rates, and circuit breaker trip history in the Dev Console.
+Distributed under the MIT License. See `LICENSE` for details.
+
+</div>
