@@ -146,7 +146,11 @@ def index_document(
         for doc in documents:
             doc.metadata["file_name"] = filename
             if doc.text:
-                doc.text = sanitize_text(doc.text) or ""
+                cleaned_text = sanitize_text(doc.text) or ""
+                if hasattr(doc, "set_content"):
+                    doc.set_content(cleaned_text)
+                else:
+                    doc.text = cleaned_text
 
         # Extract complete parsed text
         full_text = "\n".join([doc.text for doc in documents]).strip()
